@@ -1,0 +1,342 @@
+// backend/prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USER ─────────────────────────────────────────────────
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          UserRole  @default(USER)
+  isPremium     Boolean   @default(false)
+  premiumUntil  DateTime?
+  streak        Int       @default(0)
+  longestStreak Int       @default(0)
+  points        Int       @default(0)
+  level         UserLevel @default(BEGINNER)
+  lastActiveAt  DateTime  @default(now())
+  lastStreakDate DateTime?
+  language      String    @default("ar")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  preferences       UserPreferences?
+  sessions          Session[]
+  notifications     Notification[]
+  prayerTracker     PrayerTracker[]
+  bookmarks         Bookmark[]
+  readingHistory    ReadingHistory[]
+  achievements      UserAchievement[]
+  aiConversations   AIConversation[]
+  feedPosts         FeedPost[]
+  feedLikes         FeedLike[]
+  savedPosts        SavedPost[]
+  pushSubscriptions PushSubscription[]
+  pointsHistory     PointsHistory[]
+
+  @@map("users")
+  @@index([email])
+  @@index([role])
+  @@index([points])
+}
+
+model UserPreferences {
+  id                        String          @id @default(cuid())
+  userId                    String          @unique
+  theme                     String          @default("dark")
+  quranReciter              String          @default("ar.alafasy")
+  quranTranslation          String          @default("en.asad")
+  prayerMethod              Int             @default(2)
+  quranFontSize             Int             @default(24)
+  showTranslation           Boolean         @default(true)
+  showTransliteration       Boolean         @default(false)
+  notificationsEnabled      Boolean         @default(true)
+  prayerNotifications       Boolean         @default(true)
+  azkarNotifications        Boolean         @default(true)
+  quranReminders            Boolean         @default(true)
+  dailyPlanEnabled          Boolean         @default(true)
+  hijriCalendar             Boolean         @default(true)
+  autoPlayAudio             Boolean         @default(false)
+  sleepTimerDefault         Int?
+  location                  Json?
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  refreshToken String   @unique
+  deviceInfo   String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+  @@index([token])
+  @@index([refreshToken])
+  @@index([userId])
+}
+
+// ─── PRAYER ────────────────────────────────────────────────
+model PrayerTracker {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime @db.Date
+  fajr      Boolean  @default(false)
+  dhuhr     Boolean  @default(false)
+  asr       Boolean  @default(false)
+  maghrib   Boolean  @default(false)
+  isha      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("prayer_tracker")
+  @@index([userId, date])
+}
+
+// ─── QURAN ─────────────────────────────────────────────────
+model Bookmark {
+  id           String   @id @default(cuid())
+  userId       String
+  surahNumber  Int
+  ayahNumber   Int
+  note         String?
+  color        String?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, surahNumber, ayahNumber])
+  @@map("bookmarks")
+  @@index([userId])
+}
+
+model ReadingHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  surahNumber  Int
+  ayahNumber   Int
+  readAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reading_history")
+  @@index([userId, readAt])
+}
+
+// ─── AI ────────────────────────────────────────────────────
+model AIConversation {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String?
+  mode      String    @default("chat")
+  messages  Json
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_conversations")
+  @@index([userId, createdAt])
+}
+
+// ─── NOTIFICATIONS ─────────────────────────────────────────
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  read      Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+model PushSubscription {
+  id           String   @id @default(cuid())
+  userId       String
+  endpoint     String   @unique
+  keys         Json
+  deviceType   String?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
+  @@index([userId])
+}
+
+// ─── COMMUNITY FEED ────────────────────────────────────────
+model FeedPost {
+  id          String       @id @default(cuid())
+  userId      String
+  type        PostType     @default(TEXT)
+  content     String
+  mediaUrl    String?
+  mediaType   String?
+  tags        String[]
+  isVisible   Boolean      @default(true)
+  isReported  Boolean      @default(false)
+  likesCount  Int          @default(0)
+  commentsCount Int        @default(0)
+  sharesCount Int          @default(0)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  likes      FeedLike[]
+  savedBy    SavedPost[]
+  comments   FeedComment[]
+
+  @@map("feed_posts")
+  @@index([userId])
+  @@index([createdAt])
+  @@index([tags])
+}
+
+model FeedLike {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("feed_likes")
+}
+
+model SavedPost {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("saved_posts")
+}
+
+model FeedComment {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  post FeedPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("feed_comments")
+  @@index([postId])
+}
+
+// ─── ACHIEVEMENTS ──────────────────────────────────────────
+model Achievement {
+  id          String  @id @default(cuid())
+  slug        String  @unique
+  nameAr      String
+  descriptionAr String
+  icon        String
+  points      Int     @default(0)
+  category    String
+  target      Int     @default(1)
+  isActive    Boolean @default(true)
+
+  users UserAchievement[]
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String      @id @default(cuid())
+  userId        String
+  achievementId String
+  progress      Int         @default(0)
+  unlockedAt    DateTime?
+  createdAt     DateTime    @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
+
+model PointsHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  amount    Int
+  reason    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("points_history")
+  @@index([userId, createdAt])
+}
+
+// ─── ENUMS ─────────────────────────────────────────────────
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  SCHOLAR
+}
+
+enum NotificationType {
+  PRAYER_TIME
+  DAILY_AZKAR
+  QURAN_REMINDER
+  STREAK_ALERT
+  ACHIEVEMENT
+  COMMUNITY
+  AI_MOTIVATION
+  SYSTEM
+}
+
+enum PostType {
+  TEXT
+  QURAN
+  HADITH
+  DUA
+  IMAGE
+  VIDEO
+}
