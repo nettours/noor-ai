@@ -1,5 +1,5 @@
 // G:\noor-ai\backend\src\server.ts
-// النسخة الكاملة — تستبدل ما قبلها
+// نسخة نظيفة بدون أي مكتبات إضافية - تعمل مباشرة على Railway
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
@@ -15,57 +15,52 @@ interface User {
 
 interface ChatMessage {
   id: string; conversationId: string; senderId: string; senderName: string;
-  type: 'text' | 'image' | 'file' | 'voice' | 'call';
+  type: 'text' | 'image' | 'file' | 'voice';
   content: string;
   fileName?: string; fileSize?: number; duration?: number;
-  callType?: 'audio' | 'video';
-  callStatus?: 'ended' | 'missed' | 'rejected';
-  createdAt: string;
-  status: 'sent' | 'delivered' | 'read';
+  createdAt: string; status: 'sent' | 'delivered' | 'read';
 }
 
+// In-memory storage (يمكن استبداله بـ Postgres لاحقاً)
 const users = new Map<string, User>();
 const usersByEmail = new Map<string, string>();
 const messages = new Map<string, ChatMessage[]>();
 const onlineUsers = new Map<string, string>();
 const typingUsers = new Map<string, Set<string>>();
-
-// Active calls: callId -> { caller, callee, type, createdAt }
-const activeCalls = new Map<string, {
-  callId: string;
-  callerId: string;
-  callerName: string;
-  callerAvatar: string;
-  callerColor: string;
-  calleeId: string;
-  type: 'audio' | 'video';
-  createdAt: number;
-}>();
+const activeCalls = new Map<string, any>();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'noor-secret-2025';
 const COLORS = ['#10B981','#F59E0B','#3B82F6','#EC4899','#A855F7','#FB923C','#06B6D4','#EF4444','#84CC16','#14B8A6','#F472B6','#8B5CF6'];
 const pickColor = () => COLORS[Math.floor(Math.random() * COLORS.length)];
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = parseInt(process.env.PORT || '4000', 10);
 
-app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE'], credentials: true }));
+app.use(cors({ origin: '*', methods: ['GET','POST','PUT','DELETE'], credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 function auth(req: any, res: Response, next: any) {
   const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({ success: false, error: 'No token' });
+  if (!token) { res.status(401).json({ success: false, error: 'No token' }); return; }
   try {
     const decoded: any = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
     next();
-  } catch { res.status(401).json({ success: false, error: 'Invalid' }); }
+  } catch { res.status(401).json({ success: false, error: 'Invalid token' }); }
 }
 
-app.get('/health', (req, res) => res.json({ status: 'ok', users: users.size, online: onlineUsers.size }));
+// ─── Health ─────────────────────────────────────────
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', users: users.size, online: onlineUsers.size, time: new Date().toISOString() });
+});
 
-app.post('/api/auth/register', async (req: Request, res: Response) => {
+app.get('/', (_req, res) => {
+  res.json({ message: '🌙 Noor AI Backend', status: 'running' });
+});
+
+// ─── Auth ───────────────────────────────────────────
+app.post('/api/auth/register', async (req: Request, res: Response): Promise<any> => {
   try {
     const { name, email, password } = req.body;
     if (!name?.trim() || !email?.trim() || !password) return res.status(400).json({ success: false, error: 'البيانات ناقصة' });
@@ -85,11 +80,12 @@ app.post('/api/auth/register', async (req: Request, res: Response) => {
     const token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '30d' });
     console.log('✅ New user:', user.name);
     io.emit('user:new', { id: user.id, name: user.name, avatar: user.avatar, color: user.color, online: false });
+
     res.json({ success: true, data: { token, user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, color: user.color } }});
-  } catch (e) { res.status(500).json({ success: false, error: 'خطأ' }); }
+  } catch (e) { res.status(500).json({ success: false, error: 'خطأ في السيرفر' }); }
 });
 
-app.post('/api/auth/login', async (req: Request, res: Response) => {
+app.post('/api/auth/login', async (req: Request, res: Response): Promise<any> => {
   try {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ success: false, error: 'البيانات ناقصة' });
@@ -104,6 +100,7 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   } catch { res.status(500).json({ success: false, error: 'خطأ' }); }
 });
 
+// ─── Users ──────────────────────────────────────────
 app.get('/api/users', auth, (req: any, res: Response) => {
   const list = Array.from(users.values())
     .filter(u => u.id !== req.userId)
@@ -114,6 +111,22 @@ app.get('/api/users', auth, (req: any, res: Response) => {
   res.json({ success: true, users: list });
 });
 
+app.get('/api/users/search', auth, (req: any, res: Response) => {
+  const q = (req.query.q || '').toString().toLowerCase();
+  const list = Array.from(users.values())
+    .filter(u => u.id !== req.userId)
+    .filter(u => !q || u.name.toLowerCase().includes(q) || u.email.includes(q))
+    .map(u => ({ id: u.id, name: u.name, avatar: u.avatar, color: u.color, online: onlineUsers.has(u.id) }));
+  res.json({ success: true, users: list });
+});
+
+app.get('/api/users/:id', auth, (req: any, res: Response): any => {
+  const u = users.get(req.params.id);
+  if (!u) return res.status(404).json({ success: false });
+  res.json({ success: true, user: { id: u.id, name: u.name, avatar: u.avatar, color: u.color, online: onlineUsers.has(u.id), lastSeen: u.lastSeen }});
+});
+
+// ─── Chat ───────────────────────────────────────────
 app.get('/api/chat/:conversationId', auth, (req: any, res: Response) => {
   res.json({ success: true, messages: messages.get(req.params.conversationId) || [] });
 });
@@ -134,7 +147,7 @@ io.on('connection', (socket) => {
     socket.data.userId = userId;
     socket.data.userName = userName;
     io.emit('user:status', { userId, online: true });
-    console.log('🟢', userName, '(' + onlineUsers.size + ' online)');
+    console.log('🟢', userName);
   });
 
   socket.on('chat:join', ({ conversationId }: any) => {
@@ -177,72 +190,48 @@ io.on('connection', (socket) => {
     socket.to('chat:' + conversationId).emit('chat:typing', { userId, isTyping });
   });
 
-  // ═══════════════════════════════════════════════════════
-  // WebRTC SIGNALING — Voice & Video Calls
-  // ═══════════════════════════════════════════════════════
-
-  // 1) المتصل يبدأ مكالمة
+  // ─── WebRTC Calls ────────────────────────────────
   socket.on('call:initiate', ({ calleeId, type }: any) => {
     const callerId = socket.data.userId;
     const callerName = socket.data.userName;
     const caller = users.get(callerId);
     if (!caller) return;
-
     const calleeSocketId = onlineUsers.get(calleeId);
-    if (!calleeSocketId) {
-      socket.emit('call:failed', { reason: 'المستخدم غير متصل' });
-      return;
-    }
+    if (!calleeSocketId) { socket.emit('call:failed', { reason: 'المستخدم غير متصل' }); return; }
 
     const callId = 'call_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    activeCalls.set(callId, {
-      callId, callerId, callerName,
-      callerAvatar: caller.avatar, callerColor: caller.color,
-      calleeId, type, createdAt: Date.now(),
-    });
+    activeCalls.set(callId, { callId, callerId, callerName, calleeId, type, createdAt: Date.now() });
 
-    // إرسال إشعار للمستلم
     io.to(calleeSocketId).emit('call:incoming', {
       callId, callerId, callerName,
-      callerAvatar: caller.avatar, callerColor: caller.color,
-      type,
+      callerAvatar: caller.avatar, callerColor: caller.color, type,
     });
-
-    // تأكيد للمتصل
     socket.emit('call:ringing', { callId });
-    console.log('📞 Call initiated:', callerName, '→', calleeId, '(' + type + ')');
 
-    // إنهاء تلقائي بعد 45 ثانية إذا لم يرد
     setTimeout(() => {
       if (activeCalls.has(callId)) {
-        const call = activeCalls.get(callId);
         activeCalls.delete(callId);
-        io.to(socket.id).emit('call:ended', { reason: 'لم يرد' });
+        socket.emit('call:ended', { reason: 'لم يرد' });
         if (calleeSocketId) io.to(calleeSocketId).emit('call:cancelled', { callId });
       }
     }, 45000);
   });
 
-  // 2) المستلم يقبل المكالمة
   socket.on('call:accept', ({ callId }: any) => {
     const call = activeCalls.get(callId);
     if (!call) return;
     const callerSocketId = onlineUsers.get(call.callerId);
     if (callerSocketId) io.to(callerSocketId).emit('call:accepted', { callId });
-    console.log('✅ Call accepted:', callId);
   });
 
-  // 3) المستلم يرفض المكالمة
   socket.on('call:reject', ({ callId }: any) => {
     const call = activeCalls.get(callId);
     if (!call) return;
     activeCalls.delete(callId);
     const callerSocketId = onlineUsers.get(call.callerId);
     if (callerSocketId) io.to(callerSocketId).emit('call:rejected', { callId });
-    console.log('❌ Call rejected:', callId);
   });
 
-  // 4) WebRTC SDP offer (من المتصل بعد قبول المستلم)
   socket.on('call:offer', ({ callId, offer }: any) => {
     const call = activeCalls.get(callId);
     if (!call) return;
@@ -250,7 +239,6 @@ io.on('connection', (socket) => {
     if (calleeSocketId) io.to(calleeSocketId).emit('call:offer', { callId, offer });
   });
 
-  // 5) WebRTC SDP answer (من المستلم رداً على offer)
   socket.on('call:answer', ({ callId, answer }: any) => {
     const call = activeCalls.get(callId);
     if (!call) return;
@@ -258,7 +246,6 @@ io.on('connection', (socket) => {
     if (callerSocketId) io.to(callerSocketId).emit('call:answer', { callId, answer });
   });
 
-  // 6) ICE candidate (تبادل بين الطرفين)
   socket.on('call:ice', ({ callId, candidate }: any) => {
     const call = activeCalls.get(callId);
     if (!call) return;
@@ -268,7 +255,6 @@ io.on('connection', (socket) => {
     if (otherSocketId) io.to(otherSocketId).emit('call:ice', { callId, candidate });
   });
 
-  // 7) إنهاء المكالمة
   socket.on('call:end', ({ callId }: any) => {
     const call = activeCalls.get(callId);
     if (!call) return;
@@ -276,7 +262,6 @@ io.on('connection', (socket) => {
     const otherId = socket.data.userId === call.callerId ? call.calleeId : call.callerId;
     const otherSocketId = onlineUsers.get(otherId);
     if (otherSocketId) io.to(otherSocketId).emit('call:ended', { callId });
-    console.log('🛑 Call ended:', callId);
   });
 
   socket.on('disconnect', () => {
@@ -286,8 +271,6 @@ io.on('connection', (socket) => {
       const u = users.get(userId);
       if (u) u.lastSeen = new Date().toISOString();
       io.emit('user:status', { userId, online: false });
-
-      // إنهاء أي مكالمة نشطة لهذا المستخدم
       for (const [callId, call] of activeCalls.entries()) {
         if (call.callerId === userId || call.calleeId === userId) {
           activeCalls.delete(callId);
@@ -300,7 +283,7 @@ io.on('connection', (socket) => {
   });
 });
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('═══════════════════════════════════════');
   console.log('🌙 Noor AI Backend running on port', PORT);
   console.log('💬 Socket.io ready');
