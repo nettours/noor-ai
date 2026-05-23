@@ -1,3 +1,4 @@
+import { AuthGuard } from '@/components/ui/AuthGuard';
 import type { Metadata, Viewport } from 'next';
 import { Providers } from '@/components/layout/Providers';
 import { BottomNav } from '@/components/ui/BottomNav';
@@ -26,9 +27,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="app-bg" />
         <ParticlesBg />
         <Providers>
-          <main style={{ position: 'relative', zIndex: 2, minHeight: '100dvh' }}>
-            {children}
-          </main>
+         <AuthGuard>
+  <main style={{ position: 'relative', zIndex: 2, minHeight: '100dvh' }}>
+    {children}
+  </main>
+</AuthGuard>
           <AudioBar />
           <BottomNav />
           <Toaster />
