@@ -1,753 +1,595 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { io, Socket } from 'socket.io-client';
+import Link from 'next/link';
 import {
-  Send, ArrowRight, Search, Plus, Smile, Paperclip,
-  Phone, Video, MoreVertical, Check, CheckCheck,
-  Image as ImageIcon, Mic, Square, X, File as FileIcon,
-  Download, Play, Pause, Users, Bell, Settings
+  BookOpen, Clock, Compass, Heart, Bot, Sparkles,
+  MessageCircle, Star, ChevronLeft, Phone, Video,
+  Shield, Zap, Globe, Users, Check, ArrowRight
 } from 'lucide-react';
-import { toast } from '@/components/ui/Toast';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL?.replace('/api', '') || 'http://localhost:4000';
-
-interface Contact {
-  id: string;
-  name: string;
-  avatar: string;
-  color: string;
-  online: boolean;
-}
-
-interface Message {
-  id: string;
-  conversationId: string;
-  senderId: string;
-  senderName: string;
-  type: 'text' | 'image' | 'file' | 'voice';
-  content: string;
-  fileName?: string;
-  fileSize?: number;
-  duration?: number;
-  createdAt: string;
-  status: 'sent' | 'delivered' | 'read';
-}
-
-export default function ChatPage() {
+export default function LandingPage() {
   const router = useRouter();
-  const [me, setMe] = useState({ id: '', name: '', avatar: '', color: 'var(--green-5)' });
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [active, setActive] = useState<Contact | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [search, setSearch] = useState('');
-  const [showAttach, setShowAttach] = useState(false);
-  const [typingUsers, setTypingUsers] = useState<string[]>([]);
-  const [recording, setRecording] = useState(false);
-  const [recordTime, setRecordTime] = useState(0);
-  const [connected, setConnected] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  const socketRef = useRef<Socket | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordChunksRef = useRef<Blob[]>([]);
-  const recordTimerRef = useRef<any>(null);
-  const typingTimeoutRef = useRef<any>(null);
-
-  // ── Init user ────────────────────────────────────────
   useEffect(() => {
+    // Auto-redirect if already logged in
     try {
-      const u = JSON.parse(localStorage.getItem('noor_user') || '{}');
-      const myId = u.email || u.name || 'user_' + Date.now();
-      setMe({
-        id: myId,
-        name: u.name || 'مستخدم',
-        avatar: (u.name || 'م')[0],
-        color: 'var(--green-5)',
-      });
+      const token = localStorage.getItem('noor_token');
+      const user = localStorage.getItem('noor_user');
+      if (token && user) {
+        router.push('/home');
+        return;
+      }
     } catch {}
-
-    // Fetch contacts
-    fetch(BACKEND_URL + '/api/users')
-      .then(r => r.json())
-      .then(d => setContacts(d.users || []))
-      .catch(() => {
-        // Fallback mock data
-        setContacts([
-          { id: 'u1', name: 'أحمد محمد', avatar: 'أ', color: '#10B981', online: true },
-          { id: 'u2', name: 'فاطمة الزهراء', avatar: 'ف', color: '#F59E0B', online: true },
-          { id: 'u3', name: 'يوسف بن خالد', avatar: 'ي', color: '#3B82F6', online: false },
-          { id: 'u4', name: 'مريم العزيز', avatar: 'م', color: '#EC4899', online: false },
-        ]);
-      });
+    setIsLoaded(true);
   }, []);
 
-  // ── Connect Socket.io ─────────────────────────────────
-  useEffect(() => {
-    if (!me.id) return;
-
-    const socket = io(BACKEND_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-    });
-    socketRef.current = socket;
-
-    socket.on('connect', () => {
-      setConnected(true);
-      socket.emit('user:online', { userId: me.id, userName: me.name });
-      console.log('💬 Connected to chat server');
-    });
-
-    socket.on('disconnect', () => setConnected(false));
-
-    socket.on('chat:history', (history: Message[]) => {
-      setMessages(history);
-    });
-
-    socket.on('chat:message', (msg: Message) => {
-      setMessages(prev => {
-        if (prev.find(m => m.id === msg.id)) return prev;
-        return [...prev, msg];
-      });
-
-      // Auto-mark as read if I'm viewing this conversation
-      if (active && msg.conversationId === getConvId(me.id, active.id) && msg.senderId !== me.id) {
-        socket.emit('chat:read', { conversationId: msg.conversationId, messageId: msg.id });
-      }
-    });
-
-    socket.on('chat:status', ({ messageId, status }: any) => {
-      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, status } : m));
-    });
-
-    socket.on('chat:typing', ({ userId, isTyping }: any) => {
-      setTypingUsers(prev => isTyping
-        ? Array.from(new Set([...prev, userId]))
-        : prev.filter(id => id !== userId)
-      );
-    });
-
-    socket.on('chat:deleted', ({ messageId }: any) => {
-      setMessages(prev => prev.filter(m => m.id !== messageId));
-    });
-
-    return () => { socket.disconnect(); };
-  }, [me.id, me.name]);
-
-  // ── Join/leave conversation ───────────────────────────
-  useEffect(() => {
-    if (!socketRef.current || !active) return;
-    const convId = getConvId(me.id, active.id);
-    socketRef.current.emit('chat:join', { conversationId: convId });
-    return () => {
-      socketRef.current?.emit('chat:leave', { conversationId: convId });
-    };
-  }, [active, me.id]);
-
-  // ── Auto-scroll ───────────────────────────────────────
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, typingUsers]);
-
-  // ── Helpers ───────────────────────────────────────────
-  const getConvId = (a: string, b: string) => [a, b].sort().join('__');
-
-  const sendMessage = (msgData: Partial<Message>) => {
-    if (!active || !socketRef.current) return;
-    const msg: Message = {
-      id: Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-      conversationId: getConvId(me.id, active.id),
-      senderId: me.id,
-      senderName: me.name,
-      type: 'text',
-      content: '',
-      createdAt: new Date().toISOString(),
-      status: 'sent',
-      ...msgData,
-    } as Message;
-    socketRef.current.emit('chat:send', msg);
-  };
-
-  const sendText = () => {
-    if (!input.trim()) return;
-    sendMessage({ type: 'text', content: input.trim() });
-    setInput('');
-    stopTyping();
-  };
-
-  // ── Typing ────────────────────────────────────────────
-  const startTyping = () => {
-    if (!active || !socketRef.current) return;
-    socketRef.current.emit('chat:typing', {
-      conversationId: getConvId(me.id, active.id),
-      isTyping: true,
-    });
-    clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(stopTyping, 2000);
-  };
-
-  const stopTyping = () => {
-    if (!active || !socketRef.current) return;
-    socketRef.current.emit('chat:typing', {
-      conversationId: getConvId(me.id, active.id),
-      isTyping: false,
-    });
-    clearTimeout(typingTimeoutRef.current);
-  };
-
-  // ── File handling ─────────────────────────────────────
-  const handleFile = async (file: File, type: 'image' | 'file') => {
-    if (file.size > 50 * 1024 * 1024) {
-      toast('الملف كبير جداً (أقصى 50MB)', 'error');
-      return;
-    }
-    toast('📤 جاري الرفع...', 'info');
-    const reader = new FileReader();
-    reader.onload = () => {
-      sendMessage({
-        type,
-        content: reader.result as string,
-        fileName: file.name,
-        fileSize: file.size,
-      });
-      setShowAttach(false);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // ── Voice recording ───────────────────────────────────
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream);
-      mediaRecorderRef.current = mr;
-      recordChunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) recordChunksRef.current.push(e.data); };
-      mr.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(recordChunksRef.current, { type: 'audio/webm' });
-        const reader = new FileReader();
-        reader.onload = () => {
-          sendMessage({
-            type: 'voice',
-            content: reader.result as string,
-            duration: recordTime,
-          });
-        };
-        reader.readAsDataURL(blob);
-      };
-      mr.start();
-      setRecording(true);
-      setRecordTime(0);
-      recordTimerRef.current = setInterval(() => setRecordTime(t => t + 1), 1000);
-    } catch (err) {
-      toast('الرجاء السماح بالميكروفون', 'error');
-    }
-  };
-
-  const stopRecording = (cancel = false) => {
-    clearInterval(recordTimerRef.current);
-    setRecording(false);
-    if (cancel) {
-      mediaRecorderRef.current?.stream.getTracks().forEach(t => t.stop());
-      mediaRecorderRef.current = null;
-    } else {
-      mediaRecorderRef.current?.stop();
-    }
-  };
-
-  // ── UI helpers ────────────────────────────────────────
-  const fmtTime = (iso: string) => {
-    const d = new Date(iso);
-    return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
-  };
-
-  const fmtDuration = (s: number) => {
-    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-  };
-
-  const fmtSize = (b: number) => {
-    if (b < 1024) return b + ' B';
-    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
-    return (b / 1024 / 1024).toFixed(1) + ' MB';
-  };
-
-  const filtered = contacts.filter(c => !search || c.name.includes(search));
-
-  // ════════════════════════════════════════════════════
-  // CHAT VIEW
-  // ════════════════════════════════════════════════════
-  if (active) {
-    const isTyping = typingUsers.includes(active.id);
+  if (!isLoaded) {
     return (
       <div style={{
-        position: 'fixed', inset: 0, zIndex: 200,
-        background: 'var(--bg-1)',
-        display: 'flex', flexDirection: 'column',
+        minHeight: '100dvh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#030712',
       }}>
-        {/* Header */}
-        <header className="glass-strong" style={{
-          padding: 'calc(var(--safe-top) + 8px) 14px 12px',
-          display: 'flex', alignItems: 'center', gap: '12px',
-          borderBottom: '1px solid var(--border-2)',
-        }}>
-          <button onClick={() => setActive(null)} style={{ padding: '8px', color: 'var(--text-1)' }}>
-            <ArrowRight size={22} />
-          </button>
-          <div style={{
-            width: '42px', height: '42px', borderRadius: '50%',
-            background: 'linear-gradient(135deg, ' + active.color + ', ' + active.color + '88)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '16px', fontWeight: 900,
-            color: '#fff',
-            position: 'relative',
-            flexShrink: 0,
-          }}>
-            {active.avatar}
-            {active.online && (
-              <div style={{
-                position: 'absolute', bottom: 0, right: 0,
-                width: '12px', height: '12px', borderRadius: '50%',
-                background: 'var(--green-5)',
-                border: '2px solid var(--bg-1)',
-              }} />
-            )}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '14px', fontWeight: 700 }}>{active.name}</div>
-            <div style={{ fontSize: '11px', color: isTyping ? 'var(--green-5)' : active.online ? 'var(--green-5)' : 'var(--text-3)' }}>
-              {isTyping ? '✍️ يكتب...' : active.online ? '🟢 متصل' : 'غير متصل'}
-              {!connected && ' • ⚠️ غير متصل بالسيرفر'}
-            </div>
-          </div>
-          <button style={iconBtn} onClick={() => toast('🚧 المكالمات قريباً')}><Phone size={20} /></button>
-          <button style={iconBtn} onClick={() => toast('🚧 الفيديو قريباً')}><Video size={20} /></button>
-        </header>
-
-        {/* Messages */}
-        <div style={{
-          flex: 1, overflowY: 'auto', padding: '16px',
-          display: 'flex', flexDirection: 'column', gap: '6px',
-        }}>
-          <div style={{ textAlign: 'center', padding: '8px' }}>
-            <span className="badge badge-gold" style={{ fontSize: '11px' }}>
-              🔒 محادثة مشفّرة
-            </span>
-          </div>
-
-          {messages.filter(m => m.conversationId === getConvId(me.id, active.id)).map((m, i, arr) => {
-            const prev = arr[i - 1];
-            const fromMe = m.senderId === me.id;
-            const showAvatar = !prev || prev.senderId !== m.senderId;
-            return (
-              <MessageBubble
-                key={m.id}
-                msg={m}
-                fromMe={fromMe}
-                showAvatar={showAvatar}
-                avatar={active.avatar}
-                color={active.color}
-                fmtTime={fmtTime}
-                fmtSize={fmtSize}
-                fmtDuration={fmtDuration}
-              />
-            );
-          })}
-
-          {isTyping && (
-            <div className="animate-fade-in" style={{ display: 'flex', alignSelf: 'flex-end' }}>
-              <div style={{
-                padding: '12px 14px',
-                background: 'var(--bg-3)',
-                borderRadius: '18px 4px 18px 18px',
-                border: '1px solid var(--border-2)',
-                display: 'flex', gap: '4px',
-              }}>
-                {[0, 1, 2].map(i => (
-                  <div key={i} style={{
-                    width: '8px', height: '8px', borderRadius: '50%',
-                    background: 'var(--text-3)',
-                    animation: 'pulse 1s ' + (i * 0.2) + 's ease-in-out infinite',
-                  }} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div ref={endRef} />
-        </div>
-
-        {/* Recording UI */}
-        {recording && (
-          <div style={{
-            padding: '12px 16px',
-            background: 'rgba(239,68,68,0.1)',
-            borderTop: '1px solid rgba(239,68,68,0.3)',
-            display: 'flex', alignItems: 'center', gap: '12px',
-          }}>
-            <div style={{
-              width: '12px', height: '12px', borderRadius: '50%',
-              background: '#EF4444',
-              animation: 'pulse 1s ease-in-out infinite',
-            }} />
-            <span style={{ fontSize: '13px', color: '#F87171', fontWeight: 700 }}>
-              🎤 جاري التسجيل... {fmtDuration(recordTime)}
-            </span>
-            <div style={{ flex: 1 }} />
-            <button onClick={() => stopRecording(true)} style={{ padding: '6px 12px', color: '#F87171', fontSize: '13px' }}>
-              إلغاء
-            </button>
-            <button onClick={() => stopRecording(false)} style={{
-              width: '36px', height: '36px', borderRadius: '50%',
-              background: 'var(--green-4)', color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Send size={16} />
-            </button>
-          </div>
-        )}
-
-        {/* Input */}
-        {!recording && (
-          <div style={{
-            padding: '10px 14px',
-            paddingBottom: 'calc(10px + var(--safe-bottom))',
-            background: 'var(--bg-glass-strong)',
-            borderTop: '1px solid var(--border-2)',
-            display: 'flex', alignItems: 'flex-end', gap: '8px',
-          }}>
-            <button
-              onClick={() => setShowAttach(!showAttach)}
-              style={{
-                width: '40px', height: '40px', borderRadius: '50%',
-                background: 'var(--bg-3)', color: 'var(--text-2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-                transform: showAttach ? 'rotate(45deg)' : 'none',
-                transition: 'all 0.2s',
-              }}
-            >
-              <Plus size={22} />
-            </button>
-
-            <div style={{
-              flex: 1, background: 'var(--bg-3)', border: '1px solid var(--border-2)',
-              borderRadius: '22px', padding: '4px 12px',
-              display: 'flex', alignItems: 'flex-end',
-            }}>
-              <textarea
-                value={input}
-                onChange={e => {
-                  setInput(e.target.value);
-                  startTyping();
-                  e.target.style.height = 'auto';
-                  e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
-                }}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }}}
-                placeholder="اكتب رسالة..."
-                rows={1}
-                style={{
-                  flex: 1, background: 'transparent', border: 'none',
-                  color: 'var(--text-0)', fontSize: '14px',
-                  resize: 'none', maxHeight: '100px',
-                  direction: 'rtl', padding: '8px 6px',
-                  lineHeight: 1.5, outline: 'none',
-                }}
-              />
-            </div>
-
-            <button
-              onClick={input.trim() ? sendText : startRecording}
-              style={{
-                width: '44px', height: '44px', borderRadius: '50%',
-                background: input.trim()
-                  ? 'linear-gradient(135deg, var(--green-3), var(--green-5))'
-                  : 'var(--bg-3)',
-                color: input.trim() ? '#fff' : 'var(--text-2)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, border: 'none', cursor: 'pointer',
-                boxShadow: input.trim() ? '0 4px 12px rgba(16,185,129,0.3)' : 'none',
-                transition: 'all 0.2s',
-              }}
-            >
-              {input.trim() ? <Send size={18} /> : <Mic size={20} />}
-            </button>
-          </div>
-        )}
-
-        {/* Attach panel */}
-        {showAttach && !recording && (
-          <div style={{
-            position: 'absolute',
-            bottom: '80px', left: '16px', right: '16px',
-            background: 'var(--bg-glass-strong)',
-            border: '1px solid var(--border-3)',
-            borderRadius: 'var(--r-lg)',
-            padding: '16px',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '12px',
-            zIndex: 10,
-            boxShadow: 'var(--shadow-lg)',
-          }}>
-            {[
-              { icon: <ImageIcon size={22} />, label: 'صورة', color: 'var(--purple-5)', onClick: () => imageInputRef.current?.click() },
-              { icon: <FileIcon size={22} />, label: 'ملف', color: 'var(--blue-5)', onClick: () => fileInputRef.current?.click() },
-              { icon: '📿', label: 'دعاء', color: 'var(--green-5)', onClick: () => { sendMessage({ type: 'text', content: '🤲 جزاك الله خيراً' }); setShowAttach(false); } },
-              { icon: '📖', label: 'آية', color: 'var(--gold-5)', onClick: () => { sendMessage({ type: 'text', content: '﴿ إِنَّ مَعَ الْعُسْرِ يُسْرًا ﴾' }); setShowAttach(false); } },
-            ].map((a: any, i) => (
-              <button key={i} onClick={a.onClick} style={{
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', gap: '6px',
-                background: 'var(--bg-3)', borderRadius: 'var(--r-md)',
-                padding: '14px 8px',
-                border: '1px solid var(--border-2)',
-              }}>
-                <div style={{
-                  width: '44px', height: '44px', borderRadius: '50%',
-                  background: a.color + '22', color: a.color,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '20px',
-                }}>
-                  {a.icon}
-                </div>
-                <span style={{ fontSize: '11px' }}>{a.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        <input ref={imageInputRef} type="file" accept="image/*" hidden
-          onChange={e => e.target.files?.[0] && handleFile(e.target.files[0], 'image')} />
-        <input ref={fileInputRef} type="file" hidden
-          onChange={e => e.target.files?.[0] && handleFile(e.target.files[0], 'file')} />
+        <div className="spinner" />
       </div>
     );
   }
 
-  // ════════════════════════════════════════════════════
-  // CONTACTS LIST
-  // ════════════════════════════════════════════════════
   return (
-    <div style={{ minHeight: '100dvh', paddingTop: 'var(--safe-top)' }}>
-      <div className="container-app" style={{ padding: '0 16px' }}>
-        <header className="animate-fade-down" style={{ paddingTop: '12px', marginBottom: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <div>
-              <h1 style={{ fontSize: '24px', fontWeight: 900 }}>💬 الدردشة</h1>
-              <div style={{ fontSize: '11px', color: connected ? 'var(--green-5)' : 'var(--text-3)', marginTop: '2px' }}>
-                {connected ? '🟢 متصل بالسيرفر' : '⚠️ غير متصل'}
+    <div style={{ minHeight: '100dvh', position: 'relative', overflow: 'hidden' }}>
+
+      {/* Animated background */}
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 0,
+        background: `
+          radial-gradient(circle at 20% 30%, rgba(16,185,129,0.15) 0%, transparent 50%),
+          radial-gradient(circle at 80% 70%, rgba(217,119,6,0.12) 0%, transparent 50%),
+          radial-gradient(circle at 50% 50%, rgba(147,51,234,0.08) 0%, transparent 60%),
+          #030712
+        `,
+      }} />
+
+      {/* Decorative islamic pattern overlay */}
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 1,
+        opacity: 0.04,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='60' viewBox='0 0 60 60'%3E%3Cg fill='none' stroke='%2310B981' stroke-width='1'%3E%3Cpath d='M30 0L60 30L30 60L0 30Z'/%3E%3Cpath d='M30 10L50 30L30 50L10 30Z'/%3E%3C/g%3E%3C/svg%3E")`,
+      }} />
+
+      <div style={{ position: 'relative', zIndex: 2 }}>
+
+        {/* ═══════════════════════════════════ */}
+        {/* HERO SECTION */}
+        {/* ═══════════════════════════════════ */}
+        <section style={{
+          minHeight: '100dvh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          padding: '60px 20px',
+          position: 'relative',
+        }}>
+
+          {/* Floating decorations */}
+          {[...Array(6)].map((_, i) => (
+            <div key={i} style={{
+              position: 'absolute',
+              top: `${10 + Math.random() * 80}%`,
+              left: `${10 + Math.random() * 80}%`,
+              fontSize: '20px',
+              opacity: 0.15,
+              animation: `float ${5 + i}s ease-in-out infinite`,
+              animationDelay: `${i * 0.5}s`,
+            }}>
+              {['🌙', '⭐', '✨', '🌟', '☪️', '💫'][i]}
+            </div>
+          ))}
+
+          <div className="animate-fade-down" style={{ maxWidth: '700px', width: '100%' }}>
+
+            {/* Logo */}
+            <div style={{
+              width: '120px',
+              height: '120px',
+              margin: '0 auto 24px',
+              borderRadius: '32px',
+              background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '60px',
+              boxShadow: '0 20px 60px rgba(16,185,129,0.4)',
+              position: 'relative',
+            }} className="animate-glow">
+              ☪️
+              <div style={{
+                position: 'absolute', inset: '-8px',
+                borderRadius: '36px',
+                border: '2px solid rgba(16,185,129,0.3)',
+                animation: 'pulse 3s ease-in-out infinite',
+              }} />
+            </div>
+
+            {/* Title */}
+            <h1 style={{
+              fontFamily: 'Amiri, serif',
+              fontSize: 'clamp(48px, 10vw, 80px)',
+              fontWeight: 700,
+              lineHeight: 1.1,
+              marginBottom: '16px',
+              background: 'linear-gradient(135deg, #FBBF24 0%, #D97706 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              filter: 'drop-shadow(0 4px 20px rgba(217,119,6,0.3))',
+            }}>
+              نور <span style={{
+                background: 'linear-gradient(135deg, #10B981, #34D399)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}>AI</span>
+            </h1>
+
+            <p style={{
+              fontSize: 'clamp(16px, 3vw, 22px)',
+              color: '#E5E7EB',
+              marginBottom: '12px',
+              fontWeight: 600,
+            }}>
+              رفيقك الذكي في طريق الإيمان 🌙
+            </p>
+
+            <p style={{
+              fontSize: 'clamp(13px, 2.5vw, 16px)',
+              color: '#9CA3AF',
+              lineHeight: 1.8,
+              maxWidth: '500px',
+              margin: '0 auto 36px',
+            }}>
+              تطبيق إسلامي شامل بأحدث التقنيات: قرآن كريم بـ 6 قراء،
+              مساعد ذكاء اصطناعي، مكالمات صوتية ومرئية بين المؤمنين،
+              ومجتمع رائع
+            </p>
+
+            {/* CTA Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              marginBottom: '40px',
+            }}>
+              <Link href="/auth/register" style={{
+                padding: '16px 32px',
+                fontSize: '16px',
+                fontWeight: 700,
+                background: 'linear-gradient(135deg, #10B981, #059669)',
+                color: '#fff',
+                borderRadius: '16px',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 12px 32px rgba(16,185,129,0.4)',
+                transition: 'all 0.3s',
+                border: 'none',
+              }} className="cta-primary">
+                ابدأ مجاناً الآن
+                <ChevronLeft size={20} />
+              </Link>
+
+              <Link href="/auth/login" style={{
+                padding: '16px 32px',
+                fontSize: '16px',
+                fontWeight: 700,
+                background: 'rgba(255,255,255,0.05)',
+                color: '#fff',
+                borderRadius: '16px',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                border: '1px solid rgba(255,255,255,0.15)',
+                backdropFilter: 'blur(10px)',
+              }}>
+                لدي حساب
+              </Link>
+            </div>
+
+            {/* Trust badges */}
+            <div style={{
+              display: 'flex',
+              gap: '20px',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              fontSize: '13px',
+              color: '#9CA3AF',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Shield size={16} color="#10B981" /> آمن 100%
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Zap size={16} color="#FBBF24" /> سريع جداً
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Globe size={16} color="#60A5FA" /> مجاني للأبد
               </div>
             </div>
-            <button onClick={() => router.push('/home')} style={iconBtn}><ArrowRight size={20} /></button>
+          </div>
+
+          {/* Scroll indicator */}
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            color: '#9CA3AF',
+            fontSize: '12px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '4px',
+            animation: 'bounce 2s ease-in-out infinite',
+          }}>
+            <span>اكتشف المزيد</span>
+            <span style={{ fontSize: '20px' }}>↓</span>
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════ */}
+        {/* FEATURES SECTION */}
+        {/* ═══════════════════════════════════ */}
+        <section style={{ padding: '80px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+          <div className="animate-fade-up" style={{ textAlign: 'center', marginBottom: '60px' }}>
+            <div className="badge-gold" style={{
+              display: 'inline-block',
+              padding: '6px 16px',
+              background: 'rgba(217,119,6,0.15)',
+              border: '1px solid rgba(217,119,6,0.3)',
+              borderRadius: '20px',
+              fontSize: '12px',
+              color: '#FBBF24',
+              fontWeight: 700,
+              marginBottom: '16px',
+            }}>
+              ✨ ميزات فريدة
+            </div>
+            <h2 style={{
+              fontSize: 'clamp(32px, 6vw, 48px)',
+              fontWeight: 900,
+              marginBottom: '12px',
+              color: '#fff',
+            }}>
+              كل ما تحتاجه في{' '}
+              <span style={{
+                background: 'linear-gradient(135deg, #10B981, #FBBF24)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}>
+                تطبيق واحد
+              </span>
+            </h2>
+            <p style={{ fontSize: '15px', color: '#9CA3AF' }}>
+              تجربة إسلامية متكاملة لا تشبه أي تطبيق آخر
+            </p>
           </div>
 
           <div style={{
-            display: 'flex', alignItems: 'center', gap: '10px',
-            background: 'var(--bg-3)', border: '1px solid var(--border-2)',
-            borderRadius: 'var(--r-full)', padding: '10px 16px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '20px',
           }}>
-            <Search size={18} color="var(--text-3)" />
-            <input
-              type="text"
-              placeholder="ابحث عن جهة اتصال..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{
-                flex: 1, background: 'transparent', border: 'none',
-                color: 'var(--text-0)', fontSize: '14px', direction: 'rtl',
-                outline: 'none',
-              }}
-            />
-          </div>
-        </header>
-
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {filtered.map((c, i) => (
-            <button
-              key={c.id}
-              onClick={() => setActive(c)}
-              className={'animate-fade-up delay-' + Math.min(i + 1, 8)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '12px',
-                padding: '12px 8px',
-                borderBottom: '1px solid var(--border-1)',
-                cursor: 'pointer', textAlign: 'right',
-                borderRadius: 'var(--r-sm)',
-                width: '100%',
-              }}
-            >
-              <div style={{ position: 'relative', flexShrink: 0 }}>
+            {[
+              { icon: BookOpen, title: 'القرآن الكريم', desc: '114 سورة بأصوات 6 قراء مشاهير', color: '#10B981' },
+              { icon: Bot, title: 'مساعد AI ذكي', desc: 'أجوبة فقهية وتفسير القرآن', color: '#67E8F9' },
+              { icon: Phone, title: 'مكالمات صوتية', desc: 'تواصل مع إخوانك مجاناً', color: '#FBBF24' },
+              { icon: Video, title: 'مكالمات فيديو', desc: 'مرئية عالية الجودة بـ WebRTC', color: '#F87171' },
+              { icon: Clock, title: 'مواقيت الصلاة', desc: 'حسب موقعك بدقة عالية', color: '#60A5FA' },
+              { icon: Compass, title: 'بوصلة القبلة', desc: 'اتجاه دقيق للقبلة', color: '#FB923C' },
+              { icon: Heart, title: 'الأذكار', desc: 'حصن المسلم كاملاً', color: '#EC4899' },
+              { icon: Sparkles, title: 'منبر الإمام', desc: 'إنشاء خطب الجمعة بـ AI', color: '#A855F7' },
+              { icon: MessageCircle, title: 'مجتمع المؤمنين', desc: 'تشارك الخير مع الإخوة', color: '#34D399' },
+            ].map((f, i) => (
+              <div
+                key={i}
+                className="feature-card animate-fade-up"
+                style={{
+                  animationDelay: `${i * 0.05}s`,
+                  padding: '24px',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '20px',
+                  transition: 'all 0.3s',
+                  backdropFilter: 'blur(10px)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                }}
+              >
                 <div style={{
-                  width: '52px', height: '52px', borderRadius: '50%',
-                  background: 'linear-gradient(135deg, ' + c.color + ', ' + c.color + '88)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '20px', fontWeight: 900, color: '#fff',
+                  position: 'absolute',
+                  top: '-30px', right: '-30px',
+                  width: '120px', height: '120px',
+                  borderRadius: '50%',
+                  background: f.color,
+                  opacity: 0.08,
+                  filter: 'blur(20px)',
+                }} />
+                <div style={{
+                  width: '56px', height: '56px',
+                  borderRadius: '16px',
+                  background: `${f.color}22`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: f.color,
+                  marginBottom: '16px',
+                  position: 'relative',
                 }}>
-                  {c.avatar}
+                  <f.icon size={26} />
                 </div>
-                {c.online && (
-                  <div style={{
-                    position: 'absolute', bottom: '2px', right: '2px',
-                    width: '14px', height: '14px', borderRadius: '50%',
-                    background: 'var(--green-5)',
-                    border: '2px solid var(--bg-0)',
-                    boxShadow: '0 0 8px var(--green-5)',
-                  }} />
-                )}
+                <h3 style={{ fontSize: '17px', fontWeight: 800, marginBottom: '6px', color: '#fff' }}>
+                  {f.title}
+                </h3>
+                <p style={{ fontSize: '13px', color: '#9CA3AF', lineHeight: 1.6 }}>
+                  {f.desc}
+                </p>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '14px', fontWeight: 700 }}>{c.name}</div>
-                <div style={{ fontSize: '12px', color: c.online ? 'var(--green-5)' : 'var(--text-3)', marginTop: '2px' }}>
-                  {c.online ? '🟢 متصل الآن' : 'غير متصل'}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div style={{ height: '40px' }} />
-      </div>
-    </div>
-  );
-}
-
-// ── Message Bubble Component ─────────────────────────────
-function MessageBubble({ msg, fromMe, showAvatar, avatar, color, fmtTime, fmtSize, fmtDuration }: any) {
-  return (
-    <div className="animate-fade-up" style={{
-      display: 'flex',
-      justifyContent: fromMe ? 'flex-start' : 'flex-end',
-      alignItems: 'flex-end',
-      gap: '8px',
-      marginTop: showAvatar ? '8px' : '1px',
-    }}>
-      {!fromMe && (
-        <div style={{ width: '28px', flexShrink: 0 }}>
-          {showAvatar && (
-            <div style={{
-              width: '28px', height: '28px', borderRadius: '50%',
-              background: 'linear-gradient(135deg, ' + color + ', ' + color + '88)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '12px', fontWeight: 900,
-            }}>{avatar}</div>
-          )}
-        </div>
-      )}
-
-      <div style={{
-        maxWidth: msg.type === 'image' ? '70%' : '75%',
-        padding: msg.type === 'image' ? '4px' : '8px 12px',
-        borderRadius: fromMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-        background: fromMe
-          ? 'linear-gradient(135deg, var(--green-3), var(--green-4))'
-          : 'var(--bg-3)',
-        border: fromMe ? 'none' : '1px solid var(--border-2)',
-        color: fromMe ? '#FFF' : 'var(--text-0)',
-        fontSize: '14px', lineHeight: 1.6,
-        direction: 'rtl', textAlign: 'right',
-        boxShadow: fromMe ? '0 2px 8px rgba(16,185,129,0.2)' : 'none',
-        overflow: 'hidden',
-      }}>
-        {msg.type === 'text' && <div>{msg.content}</div>}
-
-        {msg.type === 'image' && (
-          <div>
-            <img src={msg.content} alt="image" style={{ width: '100%', maxWidth: '280px', borderRadius: '14px', display: 'block' }} />
+            ))}
           </div>
-        )}
+        </section>
 
-        {msg.type === 'file' && (
-          <a href={msg.content} download={msg.fileName} style={{
-            display: 'flex', alignItems: 'center', gap: '10px',
-            color: 'inherit', textDecoration: 'none', padding: '4px',
+        {/* ═══════════════════════════════════ */}
+        {/* STATS SECTION */}
+        {/* ═══════════════════════════════════ */}
+        <section style={{
+          padding: '80px 20px',
+          maxWidth: '1100px',
+          margin: '0 auto',
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(16,185,129,0.1), rgba(217,119,6,0.05))',
+            border: '1px solid rgba(16,185,129,0.2)',
+            borderRadius: '24px',
+            padding: '40px 24px',
+            textAlign: 'center',
+          }}>
+            <h3 style={{
+              fontSize: 'clamp(22px, 4vw, 32px)',
+              fontWeight: 900,
+              marginBottom: '32px',
+              color: '#fff',
+            }}>
+              تطبيق يثق به آلاف المسلمين
+            </h3>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: '24px',
+            }}>
+              {[
+                { num: '114', label: 'سورة كاملة' },
+                { num: '6', label: 'قراء مشاهير' },
+                { num: '25', label: 'قصة نبي' },
+                { num: '∞', label: 'محادثات' },
+              ].map((s, i) => (
+                <div key={i} className="animate-scale-in" style={{ animationDelay: `${i * 0.1}s` }}>
+                  <div style={{
+                    fontSize: 'clamp(32px, 6vw, 48px)',
+                    fontWeight: 900,
+                    background: 'linear-gradient(135deg, #10B981, #FBBF24)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    lineHeight: 1,
+                  }}>
+                    {s.num}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#9CA3AF', marginTop: '6px' }}>
+                    {s.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════ */}
+        {/* BENEFITS SECTION */}
+        {/* ═══════════════════════════════════ */}
+        <section style={{ padding: '60px 20px', maxWidth: '900px', margin: '0 auto' }}>
+          <h2 style={{
+            fontSize: 'clamp(28px, 5vw, 40px)',
+            fontWeight: 900,
+            textAlign: 'center',
+            marginBottom: '40px',
+            color: '#fff',
+          }}>
+            لماذا{' '}
+            <span style={{
+              background: 'linear-gradient(135deg, #FBBF24, #D97706)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}>
+              نور AI؟
+            </span>
+          </h2>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {[
+              { icon: '🎯', title: 'مجاني تماماً', desc: 'كل الميزات بدون أي اشتراك أو إعلانات' },
+              { icon: '🔒', title: 'خصوصية كاملة', desc: 'بياناتك مشفّرة وآمنة، لا نبيع أي معلومات' },
+              { icon: '⚡', title: 'سريع وخفيف', desc: 'يعمل على أي جهاز وبأبطأ إنترنت' },
+              { icon: '🌙', title: 'محتوى موثوق', desc: 'مصادر علمية إسلامية معتمدة' },
+              { icon: '🤝', title: 'مجتمع متفاعل', desc: 'تواصل مع إخوانك من حول العالم' },
+              { icon: '🎨', title: 'تصميم فاخر', desc: 'واجهة جميلة بتجربة استخدام مبهرة' },
+            ].map((b, i) => (
+              <div key={i} className="animate-fade-up" style={{
+                animationDelay: `${i * 0.05}s`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                padding: '18px 20px',
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: '16px',
+              }}>
+                <div style={{ fontSize: '32px', flexShrink: 0 }}>{b.icon}</div>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>
+                    {b.title}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#9CA3AF' }}>
+                    {b.desc}
+                  </div>
+                </div>
+                <Check size={20} color="#10B981" style={{ marginInlineStart: 'auto', flexShrink: 0 }} />
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════ */}
+        {/* FINAL CTA */}
+        {/* ═══════════════════════════════════ */}
+        <section style={{ padding: '80px 20px 60px', textAlign: 'center' }}>
+          <div className="animate-fade-up" style={{
+            maxWidth: '600px',
+            margin: '0 auto',
+            padding: '50px 30px',
+            background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(217,119,6,0.08))',
+            border: '1px solid rgba(16,185,129,0.3)',
+            borderRadius: '32px',
+            position: 'relative',
+            overflow: 'hidden',
           }}>
             <div style={{
-              width: '40px', height: '40px', borderRadius: '12px',
-              background: 'rgba(255,255,255,0.2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <FileIcon size={20} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {msg.fileName}
+              position: 'absolute', top: '-50px', right: '-50px',
+              width: '200px', height: '200px', borderRadius: '50%',
+              background: '#10B981', opacity: 0.15, filter: 'blur(40px)',
+            }} />
+            <div style={{
+              position: 'absolute', bottom: '-50px', left: '-50px',
+              width: '200px', height: '200px', borderRadius: '50%',
+              background: '#FBBF24', opacity: 0.15, filter: 'blur(40px)',
+            }} />
+
+            <div style={{ position: 'relative', zIndex: 2 }}>
+              <div style={{
+                width: '70px', height: '70px',
+                margin: '0 auto 20px',
+                borderRadius: '20px',
+                background: 'linear-gradient(135deg, #10B981, #059669)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '36px',
+                boxShadow: '0 12px 40px rgba(16,185,129,0.5)',
+              }}>
+                🌙
               </div>
-              <div style={{ fontSize: '10px', opacity: 0.8 }}>{fmtSize(msg.fileSize || 0)}</div>
+
+              <h2 style={{
+                fontSize: 'clamp(24px, 5vw, 36px)',
+                fontWeight: 900,
+                marginBottom: '12px',
+                color: '#fff',
+              }}>
+                ابدأ رحلتك الإيمانية الآن
+              </h2>
+
+              <p style={{
+                fontSize: '14px',
+                color: '#D1D5DB',
+                marginBottom: '28px',
+                lineHeight: 1.7,
+              }}>
+                انضم لآلاف المسلمين الذين يستخدمون نور AI يومياً
+                <br />
+                التسجيل مجاني، ولا تحتاج بطاقة ائتمان
+              </p>
+
+              <Link href="/auth/register" style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '18px 40px',
+                fontSize: '17px',
+                fontWeight: 700,
+                background: 'linear-gradient(135deg, #FBBF24, #D97706)',
+                color: '#000',
+                borderRadius: '20px',
+                textDecoration: 'none',
+                boxShadow: '0 12px 40px rgba(217,119,6,0.5)',
+                transition: 'all 0.3s',
+              }} className="cta-final">
+                🚀 إنشاء حسابي المجاني
+                <ChevronLeft size={22} />
+              </Link>
+
+              <p style={{
+                fontSize: '11px',
+                color: '#9CA3AF',
+                marginTop: '20px',
+              }}>
+                ✨ بالتسجيل، توافق على شروط الاستخدام
+              </p>
             </div>
-            <Download size={18} />
-          </a>
-        )}
+          </div>
+        </section>
 
-        {msg.type === 'voice' && <VoicePlayer src={msg.content} duration={msg.duration || 0} fromMe={fromMe} />}
-
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          justifyContent: 'flex-end', fontSize: '10px',
-          marginTop: '4px', opacity: 0.7,
-          paddingRight: msg.type === 'image' ? '8px' : 0,
-          paddingBottom: msg.type === 'image' ? '4px' : 0,
+        {/* Footer */}
+        <footer style={{
+          padding: '30px 20px',
+          textAlign: 'center',
+          fontSize: '12px',
+          color: '#6B7280',
+          borderTop: '1px solid rgba(255,255,255,0.05)',
         }}>
-          <span>{fmtTime(msg.createdAt)}</span>
-          {fromMe && (
-            msg.status === 'read' ? <CheckCheck size={12} color="#60A5FA" /> :
-            msg.status === 'delivered' ? <CheckCheck size={12} /> :
-            <Check size={12} />
-          )}
-        </div>
+          <p>صُنع بحبّ 💚 لخدمة المسلمين</p>
+          <p style={{ marginTop: '6px' }}>نور AI © 2025 • SnetProDz</p>
+        </footer>
       </div>
+
+      <style jsx>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-20px); }
+        }
+        @keyframes bounce {
+          0%, 100% { transform: translateX(-50%) translateY(0); }
+          50% { transform: translateX(-50%) translateY(-8px); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.3; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(1.05); }
+        }
+        .feature-card:hover {
+          transform: translateY(-4px);
+          border-color: rgba(16,185,129,0.3) !important;
+          background: rgba(255,255,255,0.05) !important;
+        }
+        .cta-primary:hover {
+          transform: translateY(-2px) scale(1.02);
+          box-shadow: 0 16px 40px rgba(16,185,129,0.5);
+        }
+        .cta-final:hover {
+          transform: translateY(-2px) scale(1.03);
+          box-shadow: 0 16px 48px rgba(217,119,6,0.6);
+        }
+        .spinner {
+          width: 40px;
+          height: 40px;
+          border: 3px solid rgba(255,255,255,0.1);
+          border-top-color: #10B981;
+          border-radius: 50%;
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
-
-// ── Voice Player ────────────────────────────────────────
-function VoicePlayer({ src, duration, fromMe }: any) {
-  const [playing, setPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
-
-  const toggle = () => {
-    if (!audioRef.current) return;
-    if (playing) audioRef.current.pause();
-    else audioRef.current.play();
-  };
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '10px',
-      padding: '4px',
-      minWidth: '180px',
-    }}>
-      <audio ref={audioRef} src={src}
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => setPlaying(false)}
-      />
-      <button onClick={toggle} style={{
-        width: '36px', height: '36px', borderRadius: '50%',
-        background: 'rgba(255,255,255,0.2)',
-        color: 'inherit',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        border: 'none', cursor: 'pointer',
-      }}>
-        {playing ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
-      </button>
-      <div style={{ flex: 1, height: '3px', background: 'rgba(255,255,255,0.2)', borderRadius: '2px' }}>
-        <div style={{ width: playing ? '50%' : '0%', height: '100%', background: '#fff', borderRadius: '2px', transition: 'width 0.3s' }} />
-      </div>
-      <div style={{ fontSize: '11px', opacity: 0.8 }}>
-        {Math.floor(duration / 60)}:{String(duration % 60).padStart(2, '0')}
-      </div>
-    </div>
-  );
-}
-
-const iconBtn: React.CSSProperties = {
-  width: '40px', height: '40px', borderRadius: '50%',
-  background: 'var(--bg-3)', border: '1px solid var(--border-2)',
-  color: 'var(--text-2)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  cursor: 'pointer',
-};
