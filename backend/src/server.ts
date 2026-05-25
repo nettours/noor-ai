@@ -1,5 +1,5 @@
 // G:\noor-ai\backend\src\server.ts
-// نسخة FIX النهائية - يحتفظ بـ room_default_X IDs + بوتات حقيقية + API محتوى يومي
+// النسخة النهائية - بوتات تردّ في DM + الرسائل تظهر فوراً في الغرف
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
@@ -18,16 +18,14 @@ interface ChatMessage {
   id: string; conversationId: string;
   senderId: string; senderName: string;
   senderAvatar?: string; senderColor?: string;
-  type: 'text';
-  content: string;
+  type: 'text'; content: string;
   createdAt: string;
   status: 'sent' | 'delivered' | 'read';
 }
 
 interface ChatRoom {
   id: string; name: string; description: string;
-  icon: string; color: string;
-  category: string;
+  icon: string; color: string; category: string;
   isPublic: boolean;
   createdBy: string; createdByName: string;
   members: Set<string>; admins: Set<string>;
@@ -45,9 +43,7 @@ const activeCalls = new Map<string, any>();
 const JWT_SECRET = process.env.JWT_SECRET || 'noor-secret-2025';
 const COLORS = ['#10B981','#F59E0B','#3B82F6','#EC4899','#A855F7','#FB923C','#06B6D4','#EF4444'];
 
-// ═══════════════════════════════════════════════════════
-// FAKE USERS (Islamic bots)
-// ═══════════════════════════════════════════════════════
+// ═══ BOTS ═══
 const FAKE_USERS = [
   { name: 'أحمد المصري', avatar: 'أ', color: '#10B981', bio: 'طالب علم شرعي 📚' },
   { name: 'فاطمة الزهراء', avatar: 'ف', color: '#EC4899', bio: 'حافظة قرآن 🌷' },
@@ -59,7 +55,6 @@ const FAKE_USERS = [
   { name: 'مريم اللبنانية', avatar: 'م', color: '#FB923C', bio: 'متدبّرة آيات 🌙' },
 ];
 
-// ⚠️ نستخدم room_default_X ليتطابق مع ما يستخدمه المستخدم
 const FAKE_ROOMS = [
   { id: 'room_default_0', name: '📖 مدارسة القرآن', description: 'لمحبي حفظ القرآن وتدارسه', icon: '📖', color: '#10B981', category: 'quran' },
   { id: 'room_default_1', name: '⚖️ الفقه والأحكام', description: 'نقاش المسائل الفقهية', icon: '⚖️', color: '#FBBF24', category: 'fiqh' },
@@ -109,13 +104,11 @@ const ROOM_SEED_MESSAGES: Record<string, Array<{ botIdx: number; text: string }>
     { botIdx: 5, text: 'وعليكم السلام، كيف الحال؟' },
     { botIdx: 6, text: 'الحمد لله، أحاول أستغلّ وقتي في رمضان القادم' },
     { botIdx: 2, text: 'فكرة جميلة، ابدأ من الآن بترك العادات السيئة' },
-    { botIdx: 7, text: 'وأكثروا من قراءة القرآن قبل رمضان' },
   ],
   room_default_5: [
     { botIdx: 1, text: 'كيف أعلّم أولادي حبّ القرآن؟' },
     { botIdx: 3, text: 'بالقدوة أولاً، اقرئي أمامهم يومياً' },
     { botIdx: 7, text: 'وكافئيهم على كل سورة يحفظونها 🎁' },
-    { botIdx: 5, text: 'ولا تنسي الدعاء لهم بالتوفيق' },
     { botIdx: 1, text: 'بارك الله فيكم، سأبدأ من اليوم' },
   ],
   room_default_6: [
@@ -128,7 +121,6 @@ const ROOM_SEED_MESSAGES: Record<string, Array<{ botIdx: number; text: string }>
     { botIdx: 4, text: 'إخواني، أفكاركم في الدعوة عبر السوشيال ميديا؟' },
     { botIdx: 1, text: 'أنصح بأن تكون قصيرة وموثّقة' },
     { botIdx: 6, text: 'وأن تكون بالحكمة والموعظة الحسنة 🌟' },
-    { botIdx: 4, text: 'صدقتم، والقدوة الحسنة قبل القول' },
   ],
 };
 
@@ -143,9 +135,7 @@ const PERIODIC_MESSAGES = [
   { text: 'اللهم اجعل القرآن ربيع قلوبنا 🌷', botIdx: 7 },
 ];
 
-// ═══════════════════════════════════════════════════════
-// DAILY CONTENT (verse, hadith, wisdom)
-// ═══════════════════════════════════════════════════════
+// ═══ DAILY CONTENT ═══
 const DAILY_VERSES = [
   { text: '﴿ وَمَن يَتَّقِ اللَّهَ يَجْعَل لَّهُ مَخْرَجًا * وَيَرْزُقْهُ مِنْ حَيْثُ لَا يَحْتَسِبُ ﴾', surah: 'الطلاق', ayah: '2-3' },
   { text: '﴿ إِنَّ مَعَ الْعُسْرِ يُسْرًا ﴾', surah: 'الشرح', ayah: '6' },
@@ -156,17 +146,15 @@ const DAILY_VERSES = [
   { text: '﴿ فَاذْكُرُونِي أَذْكُرْكُمْ ﴾', surah: 'البقرة', ayah: '152' },
   { text: '﴿ وَهُوَ مَعَكُمْ أَيْنَ مَا كُنتُمْ ﴾', surah: 'الحديد', ayah: '4' },
 ];
-
 const DAILY_HADITHS = [
   { text: 'إنما الأعمال بالنيات، وإنما لكل امرئ ما نوى', narrator: 'البخاري ومسلم', explanation: 'أساس قبول الأعمال هو النية الخالصة لله' },
   { text: 'من حسن إسلام المرء تركه ما لا يعنيه', narrator: 'الترمذي', explanation: 'علامة الإيمان الصحيح ترك الفضول' },
   { text: 'لا يؤمن أحدكم حتى يحب لأخيه ما يحب لنفسه', narrator: 'البخاري ومسلم', explanation: 'الإيمان الكامل بحب الخير للآخرين' },
   { text: 'الكلمة الطيبة صدقة', narrator: 'البخاري ومسلم', explanation: 'فضل الكلام الحسن والابتسامة' },
   { text: 'من سلك طريقاً يلتمس فيه علماً سهل الله له به طريقاً إلى الجنة', narrator: 'مسلم', explanation: 'فضل طلب العلم الشرعي' },
-  { text: 'الدنيا متاع وخير متاعها المرأة الصالحة', narrator: 'مسلم', explanation: 'منزلة الزوجة الصالحة في الإسلام' },
+  { text: 'الدنيا متاع وخير متاعها المرأة الصالحة', narrator: 'مسلم', explanation: 'منزلة الزوجة الصالحة' },
   { text: 'من قال سبحان الله العظيم وبحمده غُرست له نخلة في الجنة', narrator: 'الترمذي', explanation: 'عظم أجر الذكر' },
 ];
-
 const DAILY_WISDOMS = [
   { text: 'العلم بلا عمل كالشجر بلا ثمر', author: 'الإمام الشافعي' },
   { text: 'من راقب الناس مات همّاً، وفاز باللذة الجريء', author: 'الإمام أحمد' },
@@ -188,9 +176,27 @@ function getTodayContent() {
   };
 }
 
-// ═══════════════════════════════════════════════════════
-// SEED ALL FAKE DATA
-// ═══════════════════════════════════════════════════════
+// ═══ DM BOT REPLIES (شخصيات) ═══
+const DM_REPLIES_BY_BOT: Record<number, string[]> = {
+  0: ['وعليكم السلام ورحمة الله 🌙', 'أهلاً بك أخي الكريم', 'بارك الله فيك على المراسلة', 'كيف يمكنني مساعدتك في الفقه؟', '﴿ وَقُل رَّبِّ زِدْنِي عِلْمًا ﴾'],
+  1: ['وعليكم السلام، أهلاً بك أختي 💚', 'مرحباً بك، أنا فاطمة', 'بارك الله فيك', 'هل تريدين مدارسة سورة معينة؟', 'إن شاء الله نلتقي في الخير دائماً 🌷'],
+  2: ['وعليكم السلام، حياك الله', 'أهلاً وسهلاً', 'كيف يمكنني خدمتك في مسائل الفقه؟', 'بارك الله فيك على التواصل', 'سبحان الله، الحمد لله ⚖️'],
+  3: ['وعليكم السلام، أهلاً بك أختي', 'مرحباً، أنا عائشة، مدرّسة قرآن', 'هل عندك أسئلة عن التجويد؟', 'جزاك الله خيراً 📖', 'الله يبارك فيك'],
+  4: ['وعليكم السلام ورحمة الله وبركاته', 'أهلاً بك، أنا يوسف، إمام مسجد', 'كيف أفيدك في أمر دينك؟', 'بارك الله فيك على السؤال 🕌', 'اللهم وفقنا لما تحب وترضى'],
+  5: ['وعليكم السلام أختي الكريمة', 'مرحباً، أنا خديجة، باحثة شرعية', 'يسعدني التواصل معك 💚', 'هل تريدين مدارسة موضوع معين؟', 'بارك الله فيك'],
+  6: ['وعليكم السلام أخي', 'أهلاً بك، أنا عمر', 'كيف الحال؟', 'بارك الله فيك على التواصل ☪️', 'الحمد لله رب العالمين'],
+  7: ['وعليكم السلام، أهلاً بك أختي', 'مرحباً، أنا مريم 🌙', 'يسعدني التعرّف عليك', 'بارك الله فيك على المراسلة', 'اللهم اجعلنا من المتدبرين'],
+};
+
+const GENERIC_REPLIES = [
+  'سبحان الله، كلام جميل',
+  'بارك الله فيك',
+  'جزاك الله خيراً 🤲',
+  'الحمد لله',
+  'ما شاء الله',
+  'اللهم بارك',
+];
+
 function seedFakeUsers() {
   FAKE_USERS.forEach((fu, i) => {
     const id = 'bot_' + i;
@@ -203,7 +209,6 @@ function seedFakeUsers() {
     });
     if (i < 5) onlineUsers.set(id, 'bot_socket_' + i);
   });
-  console.log('🤖 Seeded', FAKE_USERS.length, 'bots (5 online)');
 }
 
 function seedFakeRooms() {
@@ -218,11 +223,9 @@ function seedFakeRooms() {
       createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
     });
   });
-  console.log('🏠 Seeded', FAKE_ROOMS.length, 'rooms');
 }
 
 function seedFakeMessages() {
-  let total = 0;
   for (const [roomId, msgs] of Object.entries(ROOM_SEED_MESSAGES)) {
     const baseTime = Date.now() - 86400000;
     const list: ChatMessage[] = msgs.map((m, i) => {
@@ -241,18 +244,15 @@ function seedFakeMessages() {
       };
     });
     roomMessages.set(roomId, list);
-    total += list.length;
   }
-  console.log('💬 Seeded', total, 'messages');
 }
 
 seedFakeUsers();
 seedFakeRooms();
 seedFakeMessages();
+console.log('🤖', FAKE_USERS.length, 'bots ready');
+console.log('🏠', FAKE_ROOMS.length, 'rooms with messages');
 
-// ═══════════════════════════════════════════════════════
-// EXPRESS APP
-// ═══════════════════════════════════════════════════════
 const app = express();
 const PORT = parseInt(process.env.PORT || '4000', 10);
 
@@ -271,20 +271,12 @@ function auth(req: any, res: Response, next: any) {
 
 app.get('/health', (_req, res) => res.json({
   status: 'ok', users: users.size, online: onlineUsers.size,
-  rooms: rooms.size, time: new Date().toISOString(),
-  version: 'FIX-v3-with-bots',
+  rooms: rooms.size, version: 'FINAL-with-DM-bots',
 }));
 
-app.get('/', (_req, res) => res.json({
-  message: '🌙 Noor AI Backend FIX-v3',
-  bots: FAKE_USERS.length,
-  rooms: rooms.size,
-}));
+app.get('/', (_req, res) => res.json({ message: '🌙 Noor AI Backend FINAL', bots: FAKE_USERS.length, rooms: rooms.size }));
 
-// ═══════ DAILY CONTENT (آية + حديث + حكمة اليوم) ═══════
-app.get('/api/daily', (_req, res) => {
-  res.json({ success: true, ...getTodayContent() });
-});
+app.get('/api/daily', (_req, res) => res.json({ success: true, ...getTodayContent() }));
 
 // ─── Auth ───
 app.post('/api/auth/register', async (req: Request, res: Response): Promise<any> => {
@@ -304,10 +296,9 @@ app.post('/api/auth/register', async (req: Request, res: Response): Promise<any>
     users.set(id, user);
     usersByEmail.set(user.email, id);
     const token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '30d' });
-    console.log('✅ User:', user.name);
     io.emit('user:new', { id: user.id, name: user.name, avatar: user.avatar, color: user.color, online: false });
 
-    // Welcome bot message after 3s
+    // Welcome message
     setTimeout(() => {
       const bot = users.get('bot_0')!;
       const msg: ChatMessage = {
@@ -317,8 +308,7 @@ app.post('/api/auth/register', async (req: Request, res: Response): Promise<any>
         senderAvatar: bot.avatar, senderColor: bot.color,
         type: 'text',
         content: `أهلاً وسهلاً بأخينا ${user.name} في نور AI 🌙💚`,
-        createdAt: new Date().toISOString(),
-        status: 'sent',
+        createdAt: new Date().toISOString(), status: 'sent',
       };
       const list = roomMessages.get('room_default_2') || [];
       list.push(msg);
@@ -327,7 +317,7 @@ app.post('/api/auth/register', async (req: Request, res: Response): Promise<any>
     }, 3000);
 
     res.json({ success: true, data: { token, user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, color: user.color } }});
-  } catch { res.status(500).json({ success: false, error: 'خطأ' }); }
+  } catch { res.status(500).json({ success: false }); }
 });
 
 app.post('/api/auth/login', async (req: Request, res: Response): Promise<any> => {
@@ -360,24 +350,20 @@ app.get('/api/chat/:conversationId', auth, (req: any, res: Response) => {
   res.json({ success: true, messages: messages.get(req.params.conversationId) || [] });
 });
 
-// ─── Rooms ───
 app.get('/api/rooms', auth, (req: any, res: Response) => {
-  const list = Array.from(rooms.values())
-    .filter(r => r.isPublic || r.members.has(req.userId))
-    .map(r => ({
-      id: r.id, name: r.name, description: r.description,
-      icon: r.icon, color: r.color, category: r.category,
-      isPublic: r.isPublic,
-      memberCount: r.members.size,
-      isMember: r.members.has(req.userId) || r.isPublic,
-      isAdmin: r.admins.has(req.userId),
-      isOwner: r.createdBy === req.userId,
-      createdByName: r.createdByName,
-      createdAt: r.createdAt,
-      onlineCount: Array.from(r.members).filter(id => onlineUsers.has(id)).length,
-      lastMessage: (roomMessages.get(r.id) || []).slice(-1)[0]?.content?.slice(0, 60) || '',
-    }))
-    .sort((a, b) => b.memberCount - a.memberCount);
+  const list = Array.from(rooms.values()).map(r => ({
+    id: r.id, name: r.name, description: r.description,
+    icon: r.icon, color: r.color, category: r.category,
+    isPublic: r.isPublic,
+    memberCount: r.members.size,
+    isMember: true,
+    isAdmin: r.admins.has(req.userId),
+    isOwner: r.createdBy === req.userId,
+    createdByName: r.createdByName,
+    createdAt: r.createdAt,
+    onlineCount: Array.from(r.members).filter(id => onlineUsers.has(id)).length,
+    lastMessage: (roomMessages.get(r.id) || []).slice(-1)[0]?.content?.slice(0, 60) || '',
+  })).sort((a, b) => b.memberCount - a.memberCount);
   res.json({ success: true, rooms: list });
 });
 
@@ -395,7 +381,6 @@ app.get('/api/rooms/:id', auth, (req: any, res: Response): any => {
       isBot: u.isBot,
     };
   }).filter(Boolean);
-
   res.json({
     success: true,
     room: {
@@ -418,14 +403,13 @@ app.post('/api/rooms', auth, (req: any, res: Response): any => {
   if (!name?.trim() || name.trim().length < 3) return res.status(400).json({ success: false, error: 'الاسم قصير' });
   const user = users.get(req.userId);
   if (!user) return res.status(401).json({ success: false });
-
   const id = 'room_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
   const room: ChatRoom = {
     id, name: name.trim(), description: (description || '').trim(),
     icon: icon || '💬', color: color || '#10B981',
     category: category || 'general', isPublic: true,
     createdBy: req.userId, createdByName: user.name,
-    members: new Set([req.userId, 'bot_0', 'bot_1', 'bot_2']), // أضف بوتات تلقائياً
+    members: new Set([req.userId, 'bot_0', 'bot_1', 'bot_2']),
     admins: new Set([req.userId]),
     createdAt: new Date().toISOString(),
   };
@@ -438,7 +422,6 @@ app.get('/api/rooms/:id/messages', auth, (req: any, res: Response): any => {
   res.json({ success: true, messages: roomMessages.get(req.params.id) || [] });
 });
 
-// ─── HTTP + Socket.io ───
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: '*', methods: ['GET', 'POST'], credentials: true },
@@ -454,6 +437,9 @@ io.on('connection', (socket) => {
     io.emit('user:status', { userId, online: true });
   });
 
+  // ═══════════════════════════════════════════════════
+  // DM CHAT - مع رد البوت! 
+  // ═══════════════════════════════════════════════════
   socket.on('chat:join', ({ conversationId }: any) => {
     socket.join('chat:' + conversationId);
     socket.emit('chat:history', messages.get(conversationId) || []);
@@ -466,8 +452,60 @@ io.on('connection', (socket) => {
     list.push(msg);
     messages.set(msg.conversationId, list);
     io.to('chat:' + msg.conversationId).emit('chat:message', msg);
+
+    // ⭐ تحقق إذا كان الـ recipient بوت → ردّ تلقائي
+    const parts = msg.conversationId.split('__');
+    const otherUserId = parts.find(p => p !== msg.senderId);
+    if (!otherUserId) return;
+
+    const otherUser = users.get(otherUserId);
+    if (otherUser && otherUser.isBot) {
+      const botIdx = parseInt(otherUserId.replace('bot_', ''));
+      const replies = DM_REPLIES_BY_BOT[botIdx] || GENERIC_REPLIES;
+      const replyText = replies[Math.floor(Math.random() * replies.length)];
+
+      // typing indicator
+      setTimeout(() => {
+        io.to('chat:' + msg.conversationId).emit('chat:typing', {
+          userId: otherUser.id, isTyping: true,
+        });
+      }, 1500);
+
+      // send reply
+      setTimeout(() => {
+        io.to('chat:' + msg.conversationId).emit('chat:typing', {
+          userId: otherUser.id, isTyping: false,
+        });
+
+        const botReply: ChatMessage = {
+          id: 'msg_bot_dm_' + Date.now(),
+          conversationId: msg.conversationId,
+          senderId: otherUser.id,
+          senderName: otherUser.name,
+          senderAvatar: otherUser.avatar,
+          senderColor: otherUser.color,
+          type: 'text',
+          content: replyText,
+          createdAt: new Date().toISOString(),
+          status: 'sent',
+        };
+        const list2 = messages.get(msg.conversationId) || [];
+        list2.push(botReply);
+        messages.set(msg.conversationId, list2);
+        io.to('chat:' + msg.conversationId).emit('chat:message', botReply);
+      }, 3500 + Math.random() * 3500);
+    }
   });
 
+  socket.on('chat:typing', ({ conversationId, isTyping }: any) => {
+    const userId = socket.data.userId;
+    if (!userId) return;
+    socket.to('chat:' + conversationId).emit('chat:typing', { userId, isTyping });
+  });
+
+  // ═══════════════════════════════════════════════════
+  // ROOMS - مع تأكيد عودة الرسالة للمُرسل
+  // ═══════════════════════════════════════════════════
   socket.on('room:join', ({ roomId }: any) => {
     const room = rooms.get(roomId);
     if (!room) return;
@@ -478,13 +516,13 @@ io.on('connection', (socket) => {
 
   socket.on('room:leave', ({ roomId }: any) => socket.leave('room:' + roomId));
 
-  socket.on('room:send', ({ roomId, message }: any) => {
+  socket.on('room:send', ({ roomId, message }: any, callback: any) => {
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room) { if (callback) callback({ success: false }); return; }
     const userId = socket.data.userId;
-    if (!userId) return;
+    if (!userId) { if (callback) callback({ success: false }); return; }
     const user = users.get(userId);
-    if (!user) return;
+    if (!user) { if (callback) callback({ success: false }); return; }
 
     const msg: ChatMessage = {
       id: message.id || 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
@@ -503,9 +541,13 @@ io.on('connection', (socket) => {
     list.push(msg);
     if (list.length > 500) list.splice(0, list.length - 500);
     roomMessages.set(roomId, list);
+
+    // ⭐ بثّ للجميع بما فيهم المُرسل (io.to بدلاً من socket.to)
     io.to('room:' + roomId).emit('room:message', msg);
 
-    // BOT RESPONSE - 50% chance
+    if (callback) callback({ success: true, message: msg });
+
+    // BOT RESPONSE
     if (Math.random() < 0.5) {
       const responses = [
         'بارك الله فيك أخي 💚',
@@ -558,7 +600,7 @@ io.on('connection', (socket) => {
     socket.to('room:' + roomId).emit('room:typing', { roomId, userId, userName, isTyping });
   });
 
-  // Calls (kept minimal)
+  // Calls
   socket.on('call:initiate', ({ calleeId, type }: any) => {
     const caller = users.get(socket.data.userId);
     if (!caller) return;
@@ -587,7 +629,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// ═══ PERIODIC BOT ACTIVITY ═══
+// Periodic bot messages
 setInterval(() => {
   const allRoomIds = Array.from(rooms.keys());
   if (allRoomIds.length === 0) return;
@@ -603,21 +645,19 @@ setInterval(() => {
     senderId: bot.id, senderName: bot.name,
     senderAvatar: bot.avatar, senderColor: bot.color,
     type: 'text', content: msg.text,
-    createdAt: new Date().toISOString(),
-    status: 'sent',
+    createdAt: new Date().toISOString(), status: 'sent',
   };
   const list = roomMessages.get(roomId) || [];
   list.push(message);
   if (list.length > 500) list.splice(0, list.length - 500);
   roomMessages.set(roomId, list);
   io.to('room:' + roomId).emit('room:message', message);
-}, 60000); // every 60 seconds
+}, 60000);
 
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('═══════════════════════════════════════');
-  console.log('🌙 Noor AI Backend FIX-v3 on port', PORT);
-  console.log('🤖', FAKE_USERS.length, 'bots ready');
-  console.log('🏠', FAKE_ROOMS.length, 'rooms with messages');
-  console.log('📖 Daily content API ready');
+  console.log('🌙 Noor AI FINAL on port', PORT);
+  console.log('🤖 8 bots ready (DM + Rooms replies)');
+  console.log('📖 Daily content + Stories ready');
   console.log('═══════════════════════════════════════');
 });
