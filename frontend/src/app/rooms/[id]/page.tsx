@@ -2,9 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
-import {
-  Send, ArrowRight, Users, Video, X, Lock
-} from 'lucide-react';
+import { Send, ArrowRight, Users, Video, X, Lock } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 const BACKEND = API.replace('/api', '');
@@ -12,20 +10,8 @@ const BACKEND = API.replace('/api', '');
 interface Message {
   id: string; senderId: string; senderName: string;
   senderAvatar?: string; senderColor?: string;
-  type: string; content: string;
-  createdAt: string;
-}
-
-interface RoomDetail {
-  id: string; name: string; description: string;
-  icon: string; color: string; isPublic: boolean;
-  memberCount: number; isMember: boolean; isOwner: boolean;
-  createdByName: string;
-  members: Array<{
-    id: string; name: string; avatar: string; color: string;
-    online: boolean; isAdmin: boolean; isOwner: boolean;
-    isBot?: boolean; bio?: string;
-  }>;
+  type: string; content: string; createdAt: string;
+  _pending?: boolean;
 }
 
 export default function RoomPage() {
@@ -34,14 +20,13 @@ export default function RoomPage() {
   const roomId = params.id as string;
 
   const [me, setMe] = useState<any>(null);
-  const [room, setRoom] = useState<RoomDetail | null>(null);
+  const [room, setRoom] = useState<any>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [showMembers, setShowMembers] = useState(false);
   const [showCall, setShowCall] = useState(false);
   const [typingNames, setTypingNames] = useState<string[]>([]);
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [connected, setConnected] = useState(false);
 
   const endRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<any>(null);
@@ -69,16 +54,26 @@ export default function RoomPage() {
     setSocket(s);
 
     s.on('connect', () => {
-      setConnected(true);
       s.emit('user:online', { userId: me.id, userName: me.name });
       s.emit('room:join', { roomId });
     });
 
-    s.on('disconnect', () => setConnected(false));
     s.on('room:history', (msgs: Message[]) => setMessages(msgs));
+
     s.on('room:message', (msg: Message) => {
-      setMessages(prev => prev.find(m => m.id === msg.id) ? prev : [...prev, msg]);
+      setMessages(prev => {
+        // إذا الرسالة موجودة أو من نفسي (pending)، استبدلها بالمؤكدة
+        const pendingIdx = prev.findIndex(m => m._pending && m.senderId === msg.senderId && m.content === msg.content);
+        if (pendingIdx !== -1) {
+          const updated = [...prev];
+          updated[pendingIdx] = msg;
+          return updated;
+        }
+        if (prev.find(m => m.id === msg.id)) return prev;
+        return [...prev, msg];
+      });
     });
+
     s.on('room:typing', ({ userName, isTyping }: any) => {
       setTypingNames(prev => isTyping ? Array.from(new Set([...prev, userName])) : prev.filter(n => n !== userName));
     });
@@ -94,8 +89,30 @@ export default function RoomPage() {
   }, [messages, typingNames]);
 
   const send = () => {
-    if (!input.trim() || !socket) return;
-    socket.emit('room:send', { roomId, message: { type: 'text', content: input.trim() } });
+    if (!input.trim() || !socket || !me) return;
+    const content = input.trim();
+    const tempId = 'tmp_' + Date.now();
+
+    // ⭐ OPTIMISTIC UPDATE: أضف الرسالة فوراً للعرض
+    const optimisticMsg: Message = {
+      id: tempId,
+      senderId: me.id,
+      senderName: me.name,
+      senderAvatar: me.avatar || me.name[0],
+      senderColor: me.color || '#10B981',
+      type: 'text',
+      content: content,
+      createdAt: new Date().toISOString(),
+      _pending: true,
+    };
+    setMessages(prev => [...prev, optimisticMsg]);
+
+    // أرسل للسيرفر
+    socket.emit('room:send', {
+      roomId,
+      message: { id: tempId, type: 'text', content }
+    });
+
     setInput('');
     socket.emit('room:typing', { roomId, isTyping: false });
   };
@@ -123,18 +140,15 @@ export default function RoomPage() {
     );
   }
 
-  // ═══ JITSI GROUP CALL ═══
+  // JITSI GROUP CALL
   if (showCall) {
-    const roomName = 'noor-ai-' + roomId;
-    const jitsiUrl = `https://meet.jit.si/${roomName}#userInfo.displayName="${encodeURIComponent(me.name)}"&config.prejoinPageEnabled=false`;
+    const jitsiUrl = `https://meet.jit.si/noor-ai-${roomId}#userInfo.displayName="${encodeURIComponent(me.name)}"&config.prejoinPageEnabled=false`;
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
         <div style={{
           padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px',
           background: 'rgba(0,0,0,0.9)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
+          display: 'flex', alignItems: 'center', gap: '12px',
           borderBottom: '1px solid rgba(255,255,255,0.1)',
         }}>
           <button onClick={() => setShowCall(false)} style={{
@@ -142,7 +156,6 @@ export default function RoomPage() {
             borderRadius: '50%', background: '#EF4444',
             border: 'none', color: '#fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(239,68,68,0.4)',
           }}>
             <X size={20} />
           </button>
@@ -150,9 +163,7 @@ export default function RoomPage() {
             <div style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>
               📹 مكالمة جماعية: {room.name}
             </div>
-            <div style={{ fontSize: '11px', color: '#9CA3AF' }}>
-              مدعومة بـ Jitsi Meet • مجانية
-            </div>
+            <div style={{ fontSize: '11px', color: '#9CA3AF' }}>مدعومة بـ Jitsi Meet</div>
           </div>
         </div>
         <iframe
@@ -169,8 +180,7 @@ export default function RoomPage() {
       position: 'fixed', inset: 0,
       background: '#000', color: '#fff',
       display: 'flex', flexDirection: 'column',
-      overflow: 'hidden',
-      zIndex: 9999,
+      overflow: 'hidden', zIndex: 9999,
     }}>
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0,
@@ -207,22 +217,15 @@ export default function RoomPage() {
           fontSize: '20px',
           boxShadow: `0 4px 16px ${room.color}66`,
           flexShrink: 0,
-        }}>
-          {room.icon}
-        </div>
+        }}>{room.icon}</div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <h2 style={{ fontSize: '15px', fontWeight: 800 }}>{room.name}</h2>
-            {!room.isPublic && <Lock size={12} color="#FBBF24" />}
-          </div>
+          <h2 style={{ fontSize: '15px', fontWeight: 800 }}>{room.name}</h2>
           <p style={{ fontSize: '11px', color: '#9CA3AF' }}>
-            {room.memberCount} عضو • {room.members.filter(m => m.online).length} متصل
-            {!connected && <span style={{ color: '#F87171' }}> • غير متصل</span>}
+            {room.memberCount} عضو • {room.members?.filter((m: any) => m.online).length || 0} متصل
           </p>
         </div>
 
-        {/* GROUP CALL BUTTON */}
         <button onClick={() => setShowCall(true)} style={{
           padding: '8px 14px',
           borderRadius: '12px',
@@ -250,14 +253,7 @@ export default function RoomPage() {
       </header>
 
       {/* Messages */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '16px',
-        position: 'relative',
-        zIndex: 2,
-      }}>
-        {/* Welcome */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', position: 'relative', zIndex: 2 }}>
         <div style={{ textAlign: 'center', padding: '24px', marginBottom: '16px' }}>
           <div style={{
             width: '70px', height: '70px',
@@ -277,15 +273,8 @@ export default function RoomPage() {
         </div>
 
         {messages.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>💬</div>
-            <p style={{ fontSize: '13px', color: '#9CA3AF' }}>
-              جاري تحميل الرسائل...
-              <br />
-              <span style={{ fontSize: '11px', color: '#6B7280' }}>
-                إذا لم تظهر، السيرفر يتم تحديثه
-              </span>
-            </p>
+          <div style={{ textAlign: 'center', padding: '20px', color: '#6B7280', fontSize: '12px' }}>
+            لا توجد رسائل بعد. كن أول من يكتب! 👋
           </div>
         )}
 
@@ -306,6 +295,7 @@ export default function RoomPage() {
                 marginBottom: showAvatar ? '12px' : '2px',
                 alignItems: 'flex-end',
                 gap: '8px',
+                opacity: m._pending ? 0.7 : 1,
               }}
             >
               {!fromMe && (
@@ -337,16 +327,14 @@ export default function RoomPage() {
                   </div>
                 )}
                 <div style={{
-                  fontSize: '14px',
-                  lineHeight: 1.5,
+                  fontSize: '14px', lineHeight: 1.5,
                   color: fromMe ? '#fff' : '#E5E7EB',
-                  direction: 'rtl',
-                  wordBreak: 'break-word',
+                  direction: 'rtl', wordBreak: 'break-word',
                 }}>
                   {m.content}
                 </div>
                 <div style={{ fontSize: '9px', opacity: 0.6, marginTop: '4px', textAlign: 'left' }}>
-                  {fmtTime(m.createdAt)}
+                  {fmtTime(m.createdAt)} {m._pending && '⏳'}
                 </div>
               </div>
             </div>
@@ -370,10 +358,10 @@ export default function RoomPage() {
         <div ref={endRef} />
       </div>
 
-      {/* Input - مع padding كافٍ في الأسفل لمنع BottomNav من تغطيتها */}
+      {/* Input - مع padding كبير في الأسفل لمنع BottomNav من تغطيته */}
       <div style={{
-        padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 90px)',
-        background: 'rgba(0,0,0,0.8)',
+        padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 100px)',
+        background: 'rgba(0,0,0,0.85)',
         backdropFilter: 'blur(20px)',
         borderTop: '1px solid rgba(255,255,255,0.05)',
         display: 'flex',
@@ -434,9 +422,7 @@ export default function RoomPage() {
               ? `linear-gradient(135deg, ${room.color}, ${room.color}cc)`
               : 'rgba(255,255,255,0.05)',
             border: 'none', color: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: input.trim() ? 'pointer' : 'not-allowed',
             flexShrink: 0,
             boxShadow: input.trim() ? `0 8px 20px ${room.color}66` : 'none',
@@ -454,12 +440,10 @@ export default function RoomPage() {
           background: 'rgba(0,0,0,0.8)',
           backdropFilter: 'blur(10px)',
           zIndex: 9999,
-          display: 'flex',
-          alignItems: 'flex-end',
+          display: 'flex', alignItems: 'flex-end',
         }} onClick={() => setShowMembers(false)}>
           <div onClick={e => e.stopPropagation()} style={{
-            width: '100%',
-            maxHeight: '70vh',
+            width: '100%', maxHeight: '70vh',
             background: 'linear-gradient(180deg, #111827, #000)',
             borderTopLeftRadius: '24px',
             borderTopRightRadius: '24px',
@@ -473,20 +457,16 @@ export default function RoomPage() {
               background: 'rgba(255,255,255,0.2)',
               margin: '0 auto 20px',
             }} />
-
-            <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px', textAlign: 'center' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, textAlign: 'center', marginBottom: '4px' }}>
               الأعضاء ({room.memberCount})
             </h3>
             <p style={{ fontSize: '11px', color: '#9CA3AF', textAlign: 'center', marginBottom: '20px' }}>
-              {room.members.filter(m => m.online).length} متصل الآن
+              {room.members?.filter((m: any) => m.online).length || 0} متصل الآن
             </p>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {room.members.map(member => (
+              {room.members?.map((member: any) => (
                 <div key={member.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
+                  display: 'flex', alignItems: 'center', gap: '12px',
                   padding: '10px 12px',
                   background: 'rgba(255,255,255,0.03)',
                   borderRadius: '12px',
@@ -520,7 +500,7 @@ export default function RoomPage() {
                       <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{member.bio}</div>
                     )}
                     <div style={{ fontSize: '10px', color: member.online ? '#10B981' : '#6B7280', marginTop: '2px' }}>
-                      {member.online ? '🟢 متصل الآن' : '⚪ غير متصل'}
+                      {member.online ? '🟢 متصل' : '⚪ غير متصل'}
                     </div>
                   </div>
                 </div>
