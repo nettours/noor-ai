@@ -10,7 +10,6 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx prisma generate
 RUN npm run build
 
 FROM base AS runner
@@ -20,7 +19,6 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nodeapp
 COPY --from=builder --chown=nodeapp:nodejs /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./
 USER nodeapp
 EXPOSE 4000
