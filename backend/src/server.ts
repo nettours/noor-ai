@@ -421,6 +421,134 @@ app.post('/api/rooms', auth, (req: any, res: Response): any => {
 app.get('/api/rooms/:id/messages', auth, (req: any, res: Response): any => {
   res.json({ success: true, messages: roomMessages.get(req.params.id) || [] });
 });
+const SYSTEM_PROMPT = `أنت "نور AI"، مساعد إسلامي ذكي. مهمتك:
+
+1. الإجابة عن الأسئلة الإسلامية بأدب وعلم
+2. الاستشهاد بالقرآن والسنة عند الإجابة
+3. تجنّب الفتاوى القاطعة وارفع المسائل المختلفة للعلماء
+4. الإجابة باللغة العربية الفصحى (إلا إذا طلب المستخدم لغة أخرى)
+5. ذكر المصادر عند نقل حديث (البخاري، مسلم، إلخ)
+6. الاعتراف عند عدم المعرفة وتوجيه السائل لأهل العلم
+7. عدم الدخول في خلافات سياسية أو طائفية
+8. التشجيع على الخير والإحسان
+
+أسلوبك: ودود، علمي، مختصر، واضح. استخدم التشكيل في الآيات. ابدأ الإجابات أحياناً بـ "بسم الله" أو "وعليكم السلام" عند المناسبة.
+
+تذكّر: أنت لست مفتياً، بل مساعد للتذكير والإرشاد. وفي المسائل الفقهية الدقيقة، اطلب من السائل سؤال أهل العلم.`;
+
+app.post('/api/ai/chat', auth, async (req: any, res: Response) => {
+  try {
+    const { messages: clientMessages } = req.body;
+    
+    if (!Array.isArray(clientMessages) || clientMessages.length === 0) {
+      return res.status(400).json({ success: false, error: 'الرسائل مطلوبة' });
+    }
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      // Fallback: structured responses when no API key
+      const lastMsg = clientMessages[clientMessages.length - 1]?.content?.toLowerCase() || '';
+      let reply = '';
+
+      if (lastMsg.includes('سلام') || lastMsg.includes('مرحبا')) {
+        reply = 'وعليكم السلام ورحمة الله وبركاته 🌙\n\nأهلاً بك في نور AI. كيف يمكنني مساعدتك اليوم؟\n\nيمكنني مساعدتك في:\n• تفسير القرآن\n• شرح الأحاديث\n• الأسئلة الفقهية\n• الأدعية والأذكار\n• قصص الأنبياء';
+      } else if (lastMsg.includes('فاتحة')) {
+        reply = 'سورة الفاتحة هي أعظم سورة في القرآن الكريم، وتُسمّى "أم الكتاب" و"السبع المثاني".\n\nنزلت في مكة وآياتها سبع. تبدأ بالبسملة وتتضمّن:\n\n1. حمد الله وتمجيده\n2. الإقرار بالعبودية لله وحده\n3. طلب الهداية للصراط المستقيم\n\nنقرأها في كل ركعة من الصلاة، وقال النبي ﷺ: "لا صلاة لمن لم يقرأ بفاتحة الكتاب".\n\nهل تريد تفسير آية معينة منها؟';
+      } else if (lastMsg.includes('صلاة') && lastMsg.includes('سفر')) {
+        reply = 'الصلاة في السفر لها أحكام خاصة:\n\n• يُسنّ قصر الصلاة الرباعية إلى ركعتين (الظهر والعصر والعشاء)\n• المغرب والفجر لا تُقصران\n• يجوز الجمع بين الظهر والعصر، والمغرب والعشاء، تقديماً أو تأخيراً\n• القصر مشروع إذا كانت المسافة 80 كم تقريباً فأكثر (مذهب الجمهور)\n\nقال تعالى: ﴿ وَإِذَا ضَرَبْتُمْ فِي الْأَرْضِ فَلَيْسَ عَلَيْكُمْ جُنَاحٌ أَن تَقْصُرُوا مِنَ الصَّلَاةِ ﴾.\n\nوالأفضل سؤال أهل العلم في تفاصيل سفرك.';
+      } else if (lastMsg.includes('حفظ') && lastMsg.includes('قرآن')) {
+        reply = 'حفظ القرآن من أعظم الأعمال. إليك خطوات عملية:\n\n📅 **يومياً**:\n• حدّد وقتاً ثابتاً (بعد الفجر مثلاً)\n• ابدأ بصفحة واحدة فقط\n• كرّر الآية 10-20 مرة قبل الانتقال\n\n🎯 **أسلوب مجرّب**:\n• اقرأ بترتيل مع شيخ مفضّل\n• اكتب الآيات لتثبيت الحفظ\n• ربط الآيات بمعانيها\n\n🔄 **المراجعة أهم من الحفظ**:\n• راجع المحفوظ يومياً\n• اقسم المصحف لـ 3 أقسام\n• استمع وأنت تعمل\n\n💚 **نصيحة**: لا تستعجل. الإتقان أهم من السرعة.';
+      } else if (lastMsg.includes('وضوء')) {
+        reply = 'الوضوء من العبادات اليومية المهمة. خطواته:\n\n1. **النية** بالقلب\n2. **التسمية**: "بسم الله"\n3. **غسل اليدين** 3 مرات\n4. **المضمضة والاستنشاق** 3 مرات\n5. **غسل الوجه** 3 مرات (من منابت الشعر إلى الذقن)\n6. **غسل اليدين** للمرفقين 3 مرات\n7. **مسح الرأس** مرة واحدة\n8. **مسح الأذنين** مرة\n9. **غسل القدمين** للكعبين 3 مرات\n\nقال النبي ﷺ: "من توضأ نحو وضوئي هذا، ثم صلى ركعتين لا يحدث فيهما نفسه، غفر له ما تقدم من ذنبه".\n\nاحرص على الترتيب والموالاة بين الأعضاء.';
+      } else if (lastMsg.includes('نوم') && (lastMsg.includes('دعاء') || lastMsg.includes('ذكر'))) {
+        reply = '🌙 أذكار النوم من السنن الجميلة:\n\n**1. قراءة سورة الإخلاص والمعوذتين** 3 مرات والمسح على الجسد.\n\n**2. آية الكرسي**: ﴿ اللَّهُ لَا إِلَٰهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ ﴾.\n\n**3. الدعاء**:\n"باسمك اللهم أموت وأحيا"\n\n**4. التسبيح**:\n"سبحان الله" 33، "الحمد لله" 33، "الله أكبر" 34\n\n**5. دعاء عظيم**:\n"اللهم أسلمتُ نفسي إليك، ووجّهتُ وجهي إليك، وفوّضتُ أمري إليك، وألجأتُ ظهري إليك، رغبة ورهبة إليك، لا ملجأ ولا منجا منك إلا إليك..."\n\nنوماً هانئاً مباركاً 💚';
+      } else {
+        reply = `بسم الله الرحمن الرحيم.\n\nسؤالك جميل، وأحاول الإجابة عليه بقدر علمي.\n\n⚠️ ملاحظة: AI API لم يُعدّ بعد في الـ Backend. لتفعيل الإجابات الذكية الحقيقية:\n\n1. سجّل في anthropic.com واحصل على API key\n2. أضفه في Railway: ANTHROPIC_API_KEY\n3. أعد نشر Backend\n\nبعدها سأستطيع الإجابة على أي سؤال بدقة عالية.\n\nسؤالك: "${clientMessages[clientMessages.length - 1].content}"`;
+      }
+
+      // Stream the fallback response character by character
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      let i = 0;
+      const interval = setInterval(() => {
+        if (i >= reply.length) {
+          clearInterval(interval);
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
+        }
+        const chunk = reply.slice(i, i + 3);
+        res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+        i += 3;
+      }, 20);
+      return;
+    }
+
+    // Call Claude API with streaming
+    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1500,
+        system: SYSTEM_PROMPT,
+        messages: clientMessages.map((m: any) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        stream: true,
+      }),
+    });
+
+    if (!claudeResponse.ok) {
+      const err = await claudeResponse.text();
+      console.error('Claude API error:', err);
+      return res.status(500).json({ success: false, error: 'AI service error' });
+    }
+
+    // Stream the response back to client
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const reader = claudeResponse.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'content_block_delta' && data.delta?.text) {
+                res.write(`data: ${JSON.stringify({ text: data.delta.text })}\n\n`);
+              }
+            } catch {}
+          }
+        }
+      }
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (err: any) {
+    console.error('AI chat error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: 'AI error' });
+    }
+  }
+});
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
