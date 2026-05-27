@@ -1,430 +1,727 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Send, ArrowRight, RefreshCw, Key, Bot, Sparkles,
-  BookOpen, FileText, Calendar
+  Send, ArrowRight, Sparkles, Bot, User, Copy, Check,
+  Volume2, Loader2, RotateCcw, BookOpen, Heart, Star,
+  HelpCircle, Compass, MessageSquare, Trash2
 } from 'lucide-react';
-import { toast } from '@/components/ui/Toast';
 
-const SUGGESTIONS = [
-  'ما حكم قضاء الصلاة الفائتة؟',
-  'فسّر لي آية الكرسي',
-  'ما فضل قراءة سورة الكهف يوم الجمعة؟',
-  'دعاء الكرب والفرج',
-  'ما شروط الصلاة الخمس؟',
-  'كيف أحفظ القرآن الكريم؟',
-  'أنشئ خطبة جمعة عن الصبر',
-];
+const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 
-const DEMOS: Record<string, string> = {
-  'قضاء': 'قضاء الصلاة الفائتة واجب على من تركها بعذر كالنوم أو النسيان.\n\nقال النبي ﷺ: «مَنْ نَامَ عَنْ صَلاةٍ أَوْ نَسِيَهَا فَلْيُصَلِّها إِذَا ذَكَرَهَا».',
-  'آية الكرسي': 'آية الكرسي (البقرة:255) أعظم آية في القرآن.\n\nقال ﷺ: «مَنْ قَرَأَ آيَةَ الْكُرْسِيِّ دُبُرَ كُلِّ صَلَاةٍ مَكْتُوبَةٍ لَمْ يَمْنَعْهُ مِنْ دُخُولِ الْجَنَّةِ إِلَّا أَنْ يَمُوتَ».',
-  'الكهف': 'قال ﷺ: «مَنْ قَرَأَ سُورَةَ الْكَهْفِ يَوْمَ الْجُمُعَةِ أَضَاءَ لَهُ مِنَ النُّورِ مَا بَيْنَ الْجُمُعَتَيْنِ».',
-  'الجمعة': 'يوم الجمعة فيه ساعة إجابة. أكثر من الصلاة على النبي ﷺ، وقراءة سورة الكهف، والدعاء قبل المغرب.',
-  'الكرب': 'من أعظم أدعية الكرب:\n\n🤲 «لَا إِلَٰهَ إِلَّا أَنتَ سُبْحَانَكَ إِنِّي كُنتُ مِنَ الظَّالِمِينَ»\n🤲 حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ',
-  'دعاء': 'من الأدعية المباركة:\n🤲 «اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْهَمِّ وَالْحَزَنِ»\n🤲 «اللَّهُمَّ إِنِّي أَسْأَلُكَ الْعَفْوَ وَالْعَافِيَةَ»',
-  'شروط': 'شروط الصلاة:\n١. الإسلام\n٢. العقل\n٣. البلوغ\n٤. النية\n٥. الطهارة\n٦. ستر العورة\n٧. استقبال القبلة\n٨. دخول الوقت',
-  'حفظ': 'لحفظ القرآن:\n١. النية الخالصة لله\n٢. اختيار وقت ثابت يومياً\n٣. حفظ نصف صفحة على الأقل يومياً\n٤. المراجعة المستمرة\n٥. الدعاء بالتيسير\n٦. مصاحبة أهل القرآن',
-  'الصبر': 'الحَمْدُ لِلَّهِ والصَّلَاةُ والسَّلَامُ عَلَى رَسُولِ اللهِ...\n\n**خطبة الصبر**\n\nأيها المؤمنون: الصبر مفتاح الفرج. قال تعالى: «إِنَّ اللَّهَ مَعَ الصَّابِرِينَ».\n\nأنواع الصبر:\n• صبر على الطاعات\n• صبر عن المعاصي\n• صبر على الأقدار\n\nقال ﷺ: «عَجَبًا لِأَمْرِ الْمُؤْمِنِ، إِنَّ أَمْرَهُ كُلَّهُ خَيْرٌ».\n\nاللهم اجعلنا من الصابرين 🤲',
-};
-
-interface Msg {
+interface Message {
   id: string;
-  role: 'user' | 'ai';
-  text: string;
-  time: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+  streaming?: boolean;
 }
 
-export default function AIPage() {
+const SUGGESTED_PROMPTS = [
+  { icon: BookOpen, text: 'اشرح لي تفسير سورة الفاتحة', category: 'تفسير' },
+  { icon: Heart, text: 'ما فضل صلاة الفجر؟', category: 'فقه' },
+  { icon: Star, text: 'كيف أحفظ القرآن بسهولة؟', category: 'حفظ' },
+  { icon: HelpCircle, text: 'ما حكم الصلاة في السفر؟', category: 'فقه' },
+  { icon: Compass, text: 'كيف أتوضأ بشكل صحيح؟', category: 'طهارة' },
+  { icon: MessageSquare, text: 'علّمني دعاء قبل النوم', category: 'أذكار' },
+];
+
+export default function AIChatPage() {
   const router = useRouter();
-  const [messages, setMessages] = useState<Msg[]>([]);
+  const [me, setMe] = useState<any>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [mode, setMode] = useState<'chat' | 'imam' | 'tafsir' | 'plan'>('chat');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [speaking, setSpeaking] = useState<string | null>(null);
+
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    const k = localStorage.getItem('noor_ai_key');
-    if (k) setApiKey(k);
-    setMessages([{
-      id: '0',
-      role: 'ai',
-      text: 'السلام عليكم ورحمة الله 🌙\n\nأنا **نور** — مساعدك الإسلامي الذكي.\n\nيمكنني الإجابة عن:\n• 📖 تفسير الآيات\n• 📿 شرح الأحاديث\n• ⚖️ مسائل الفقه\n• 🤲 الأدعية والأذكار\n• 🕌 خطب الجمعة\n\nاسأل ما شئت 🌿',
-      time: getTime(),
-    }]);
+    try {
+      const token = localStorage.getItem('noor_token');
+      const u = JSON.parse(localStorage.getItem('noor_user') || '{}');
+      if (!token || !u.id) { router.push('/auth/login'); return; }
+      setMe({ id: u.id, name: u.name, token, avatar: u.avatar, color: u.color });
+
+      // Load conversation history
+      const history = localStorage.getItem('noor_ai_history');
+      if (history) {
+        try {
+          const parsed = JSON.parse(history);
+          if (Array.isArray(parsed)) setMessages(parsed);
+        } catch {}
+      }
+    } catch { router.push('/auth/login'); }
   }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+  }, [messages]);
 
-  function getTime() {
-    const d = new Date();
-    return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
-  }
+  // Save to localStorage
+  useEffect(() => {
+    if (messages.length > 0) {
+      try {
+        // Keep only last 30 messages
+        const toSave = messages.slice(-30).map(m => ({
+          ...m,
+          streaming: false,
+        }));
+        localStorage.setItem('noor_ai_history', JSON.stringify(toSave));
+      } catch {}
+    }
+  }, [messages]);
 
-  const send = async (text?: string) => {
-    const q = (text || input).trim();
-    if (!q || loading) return;
+  const sendMessage = async (text: string) => {
+    const content = text.trim();
+    if (!content || loading) return;
+
+    const userMsg: Message = {
+      id: 'u_' + Date.now(),
+      role: 'user',
+      content,
+      timestamp: Date.now(),
+    };
+
+    const assistantMsg: Message = {
+      id: 'a_' + Date.now(),
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now() + 1,
+      streaming: true,
+    };
+
+    setMessages(prev => [...prev, userMsg, assistantMsg]);
     setInput('');
-    if (inputRef.current) inputRef.current.style.height = 'auto';
-
-    const userMsg: Msg = { id: Date.now().toString(), role: 'user', text: q, time: getTime() };
-    setMessages(prev => [...prev, userMsg]);
     setLoading(true);
 
-    let reply = '';
-    if (apiKey.startsWith('sk-ant-')) {
-      try {
-        const history = messages.slice(-6).map(m => ({
-          role: m.role === 'user' ? 'user' : 'assistant',
-          content: m.text,
-        }));
-        const modeNote = mode === 'imam' ? '\nأنت في وضع الإمام: ركز على إنشاء الخطب.'
-          : mode === 'tafsir' ? '\nأنت في وضع التفسير: فسّر الآيات بمنهج ابن كثير.'
-          : mode === 'plan' ? '\nأنت في وضع التخطيط: قدم خطة إسلامية يومية.'
-          : '';
+    try {
+      // Build conversation context (last 10 messages)
+      const context = messages.slice(-10).map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
 
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1200,
-            system: 'أنت نور — مساعد إسلامي متخصص. أجب بالعربية الفصحى السهلة. استند للقرآن والسنة الصحيحة. كن موجزاً ومفيداً.' + modeNote,
-            messages: [...history, { role: 'user', content: q }],
-          }),
+      const response = await fetch(API + '/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + me.token,
+        },
+        body: JSON.stringify({
+          messages: [...context, { role: 'user', content }],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('AI request failed');
+      }
+
+      // Streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          // Parse SSE format
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.text) {
+                  accumulated += data.text;
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    if (last && last.role === 'assistant') {
+                      last.content = accumulated;
+                    }
+                    return updated;
+                  });
+                }
+              } catch {}
+            }
+          }
+        }
+      } else {
+        // Fallback: non-streaming
+        const data = await response.json();
+        accumulated = data.text || data.content || '';
+        setMessages(prev => {
+          const updated = [...prev];
+          const last = updated[updated.length - 1];
+          if (last && last.role === 'assistant') {
+            last.content = accumulated;
+          }
+          return updated;
         });
-        const data = await res.json();
-        if (data.error) reply = '⚠️ ' + (data.error.message || 'خطأ');
-        else reply = data.content?.[0]?.text || 'تعذّر الحصول على إجابة.';
-      } catch (e: any) {
-        reply = '⚠️ تعذّر الاتصال — تحقق من المفتاح والإنترنت.';
       }
-    } else {
-      await new Promise(r => setTimeout(r, 900));
-      for (const [k, v] of Object.entries(DEMOS)) {
-        if (q.includes(k)) { reply = v; break; }
-      }
-      if (!reply) reply = 'وعليكم السلام 🌙\n\nشكراً على سؤالك.\n\n⚠️ هذا وضع التجريب — أضف مفتاح Anthropic API من 🔑 للحصول على إجابات شاملة.\n\nاحصل على المفتاح مجاناً من **console.anthropic.com**';
-    }
 
-    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'ai', text: reply, time: getTime() }]);
-    setLoading(false);
-    inputRef.current?.focus();
+      // Mark streaming complete
+      setMessages(prev => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last && last.role === 'assistant') {
+          last.streaming = false;
+          if (!last.content) {
+            last.content = 'عذراً، حدث خطأ. حاول مرة أخرى.';
+          }
+        }
+        return updated;
+      });
+    } catch (err: any) {
+      console.error('AI error:', err);
+      setMessages(prev => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last && last.role === 'assistant') {
+          last.streaming = false;
+          last.content = 'عذراً، الخدمة غير متاحة حالياً. تأكد من إعداد AI API في الـ Backend.';
+        }
+        return updated;
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const saveKey = () => {
-    if (!apiKey.startsWith('sk-ant-')) {
-      toast('المفتاح يجب أن يبدأ بـ sk-ant-', 'error');
+  const copyMessage = (id: string, content: string) => {
+    navigator.clipboard.writeText(content);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 1500);
+  };
+
+  const speakMessage = (id: string, content: string) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (speaking === id) {
+      window.speechSynthesis.cancel();
+      setSpeaking(null);
       return;
     }
-    localStorage.setItem('noor_ai_key', apiKey);
-    setShowKey(false);
-    toast('✅ تم تفعيل المساعد AI');
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(content);
+    u.lang = 'ar-SA';
+    u.rate = 0.95;
+    u.onend = () => setSpeaking(null);
+    u.onerror = () => setSpeaking(null);
+    setSpeaking(id);
+    window.speechSynthesis.speak(u);
   };
+
+  const clearHistory = () => {
+    if (confirm('هل تريد حذف كل المحادثة؟')) {
+      setMessages([]);
+      localStorage.removeItem('noor_ai_history');
+      window.speechSynthesis?.cancel();
+      setSpeaking(null);
+    }
+  };
+
+  if (!me) {
+    return (
+      <div style={{ minHeight: '100dvh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Loader2 size={40} color="#67E8F9" className="spin" />
+        <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={{
       position: 'fixed',
       inset: 0,
+      background: '#000',
+      color: '#fff',
       display: 'flex',
       flexDirection: 'column',
-      background: 'var(--bg-0)',
-      zIndex: 5,
-      paddingTop: 'var(--safe-top)',
+      overflow: 'hidden',
+      zIndex: 9999,
     }}>
+
+      {/* Animated background */}
+      <div style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 0,
+        background: `
+          radial-gradient(ellipse 80% 50% at 50% 0%, rgba(103,232,249,0.12) 0%, transparent 50%),
+          radial-gradient(ellipse 60% 40% at 80% 100%, rgba(168,85,247,0.08) 0%, transparent 50%),
+          #000
+        `,
+      }} />
+
       {/* Header */}
-      <div className="glass-strong" style={{
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--border-2)',
-        flexShrink: 0,
+      <header style={{
+        padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px',
+        background: 'rgba(0,0,0,0.7)',
+        backdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        position: 'relative',
+        zIndex: 10,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button onClick={() => router.push('/home')} style={{ padding: '8px', color: 'var(--text-1)' }}>
-            <ArrowRight size={22} />
-          </button>
-          <div style={{
-            width: '40px', height: '40px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--green-3), var(--green-5))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '18px',
-          }}>
-            <Bot size={20} color="#fff" />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '15px', fontWeight: 800 }}>نور AI</div>
-            <div style={{ fontSize: '11px', color: loading ? 'var(--gold-5)' : 'var(--green-5)' }}>
-              {loading ? '🔄 يفكر...' : '🟢 متصل'}
-            </div>
-          </div>
-          <button
-            onClick={() => setShowKey(!showKey)}
-            style={{
-              width: '36px', height: '36px',
-              borderRadius: '50%',
-              background: 'var(--bg-3)',
-              border: '1px solid var(--border-2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: apiKey ? 'var(--green-5)' : 'var(--text-3)',
-            }}
-          >
-            <Key size={16} />
-          </button>
-          <button
-            onClick={() => setMessages(messages.slice(0, 1))}
-            style={{
-              width: '36px', height: '36px',
-              borderRadius: '50%',
-              background: 'var(--bg-3)',
-              border: '1px solid var(--border-2)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-3)',
-            }}
-          >
-            <RefreshCw size={16} />
-          </button>
-        </div>
-
-        {/* Key input */}
-        {showKey && (
-          <div className="animate-fade-down" style={{ marginTop: '10px' }}>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                placeholder="sk-ant-api03-..."
-                style={{
-                  flex: 1,
-                  background: 'var(--bg-3)',
-                  border: '1px solid var(--border-2)',
-                  borderRadius: '12px',
-                  padding: '10px 14px',
-                  color: 'var(--text-0)',
-                  fontSize: '13px',
-                  direction: 'ltr',
-                  outline: 'none',
-                }}
-              />
-              <button onClick={saveKey} className="btn btn-primary" style={{ padding: '10px 16px', fontSize: '13px' }}>
-                حفظ
-              </button>
-            </div>
-            <p style={{ fontSize: '11px', color: 'var(--text-4)', marginTop: '6px' }}>
-              من <a href="https://console.anthropic.com" target="_blank" style={{ color: 'var(--blue-5)' }}>console.anthropic.com</a>
-            </p>
-          </div>
-        )}
-
-        {/* Modes */}
-        <div style={{
-          display: 'flex',
-          gap: '6px',
-          overflowX: 'auto',
-          marginTop: '10px',
+        <button onClick={() => router.push('/home')} style={{
+          width: '36px', height: '36px',
+          borderRadius: '10px',
+          background: 'rgba(255,255,255,0.05)',
+          border: 'none', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer',
         }}>
-          {[
-            { id: 'chat', label: '💬 محادثة' },
-            { id: 'imam', label: '🕌 الإمام' },
-            { id: 'tafsir', label: '📖 تفسير' },
-            { id: 'plan', label: '📋 خطة' },
-          ].map(m => (
-            <button
-              key={m.id}
-              onClick={() => setMode(m.id as any)}
-              style={{
-                whiteSpace: 'nowrap',
-                padding: '6px 12px',
-                borderRadius: '16px',
-                fontSize: '11px',
-                fontWeight: 700,
-                background: mode === m.id ? 'rgba(16,185,129,0.18)' : 'transparent',
-                border: '1px solid ' + (mode === m.id ? 'var(--green-4)' : 'var(--border-2)'),
-                color: mode === m.id ? 'var(--green-5)' : 'var(--text-3)',
-                flexShrink: 0,
-              }}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-      </div>
+          <ArrowRight size={20} />
+        </button>
 
-      {/* Messages */}
+        <div style={{
+          width: '40px', height: '40px',
+          borderRadius: '12px',
+          background: 'linear-gradient(135deg, #67E8F9, #06B6D4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 8px 24px rgba(103,232,249,0.4)',
+          position: 'relative',
+        }}>
+          <Bot size={20} color="#000" />
+          <div style={{
+            position: 'absolute',
+            bottom: '-2px', right: '-2px',
+            width: '12px', height: '12px',
+            borderRadius: '50%',
+            background: '#10B981',
+            border: '2px solid #000',
+            animation: 'pulse 2s infinite',
+          }} />
+        </div>
+
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <h2 style={{ fontSize: '15px', fontWeight: 800 }}>Noor AI</h2>
+            <Sparkles size={12} color="#FBBF24" />
+          </div>
+          <p style={{ fontSize: '11px', color: '#10B981' }}>
+            🟢 مساعدك الإسلامي • مدعوم بـ Claude
+          </p>
+        </div>
+
+        {messages.length > 0 && (
+          <button onClick={clearHistory} style={{
+            width: '36px', height: '36px',
+            borderRadius: '10px',
+            background: 'rgba(255,255,255,0.05)',
+            border: 'none', color: '#9CA3AF',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+          }}>
+            <Trash2 size={16} />
+          </button>
+        )}
+      </header>
+
+      {/* Messages area */}
       <div style={{
         flex: 1,
         overflowY: 'auto',
-        padding: '14px 16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
+        padding: '16px',
+        position: 'relative',
+        zIndex: 2,
       }}>
-        {messages.map(m => (
-          <div
-            key={m.id}
-            className="animate-fade-up"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignSelf: m.role === 'user' ? 'flex-start' : 'flex-end',
-              maxWidth: '85%',
-            }}
-          >
-            <div style={{
-              padding: '12px 15px',
-              borderRadius: m.role === 'user' ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-              background: m.role === 'user'
-                ? 'rgba(22,37,64,0.9)'
-                : 'linear-gradient(135deg, rgba(16,185,129,0.22), rgba(6,78,59,0.3))',
-              border: m.role === 'user' ? '1px solid var(--border-2)' : '1px solid rgba(16,185,129,0.3)',
-              fontSize: '14px',
-              lineHeight: 1.8,
-              direction: 'rtl',
-              textAlign: 'right',
-              whiteSpace: 'pre-wrap',
-              color: 'var(--text-0)',
-            }} dangerouslySetInnerHTML={{
-              __html: m.text
-                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                .replace(/\n/g, '<br/>')
-            }} />
-            <div style={{ fontSize: '10px', color: 'var(--text-4)', marginTop: '3px', textAlign: 'center' }}>
-              {m.time}
-            </div>
-          </div>
-        ))}
 
-        {loading && (
-          <div style={{ alignSelf: 'flex-end' }}>
+        {/* Welcome screen */}
+        {messages.length === 0 && (
+          <div style={{
+            textAlign: 'center',
+            padding: '32px 16px',
+            maxWidth: '700px',
+            margin: '0 auto',
+          }}>
             <div style={{
-              padding: '12px 16px',
-              background: 'var(--bg-3)',
-              border: '1px solid var(--border-2)',
-              borderRadius: '20px 20px 20px 4px',
-              display: 'flex',
-              gap: '4px',
-              alignItems: 'center',
+              width: '90px', height: '90px',
+              margin: '0 auto 20px',
+              borderRadius: '26px',
+              background: 'linear-gradient(135deg, #67E8F9, #06B6D4)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 20px 60px rgba(103,232,249,0.4)',
+              position: 'relative',
+              animation: 'float 4s ease-in-out infinite',
             }}>
-              {[0, 1, 2].map(i => (
-                <div key={i} style={{
-                  width: '8px', height: '8px',
-                  borderRadius: '50%',
-                  background: 'var(--green-5)',
-                  animation: 'pulse 0.7s ' + (i * 0.2) + 's ease-in-out infinite',
-                }} />
-              ))}
+              <Bot size={44} color="#000" />
+              <div style={{
+                position: 'absolute',
+                inset: '-10px',
+                borderRadius: '34px',
+                border: '2px solid rgba(103,232,249,0.3)',
+                animation: 'pulse 3s infinite',
+              }} />
+            </div>
+
+            <h2 style={{
+              fontSize: 'clamp(28px, 5vw, 38px)',
+              fontWeight: 900,
+              marginBottom: '10px',
+              background: 'linear-gradient(135deg, #fff, #9CA3AF)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}>
+              مرحباً {me.name} 🌙
+            </h2>
+
+            <p style={{
+              fontSize: '15px',
+              color: '#9CA3AF',
+              marginBottom: '8px',
+              fontWeight: 500,
+            }}>
+              أنا Noor AI — مساعدك الإسلامي الذكي
+            </p>
+
+            <p style={{
+              fontSize: '12px',
+              color: '#6B7280',
+              marginBottom: '32px',
+              lineHeight: 1.7,
+            }}>
+              اسألني عن التفسير، الفقه، الأحاديث، الأدعية،
+              <br />
+              أو أي شيء عن دينك ✨
+            </p>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: '10px',
+              maxWidth: '650px',
+              margin: '0 auto',
+            }}>
+              {SUGGESTED_PROMPTS.map((p, i) => {
+                const Icon = p.icon;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => sendMessage(p.text)}
+                    className="prompt-card"
+                    style={{
+                      padding: '14px 16px',
+                      background: 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: '14px',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      textAlign: 'right',
+                      direction: 'rtl',
+                      transition: 'all 0.3s',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <div style={{
+                      width: '36px', height: '36px',
+                      borderRadius: '10px',
+                      background: 'rgba(103,232,249,0.15)',
+                      border: '1px solid rgba(103,232,249,0.3)',
+                      color: '#67E8F9',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <Icon size={16} />
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'right' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '2px' }}>
+                        {p.text}
+                      </div>
+                      <div style={{ fontSize: '10px', color: '#67E8F9' }}>
+                        {p.category}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
+
+        {/* Messages */}
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className="msg-anim"
+            style={{
+              display: 'flex',
+              justifyContent: msg.role === 'user' ? 'flex-start' : 'flex-end',
+              marginBottom: '20px',
+              alignItems: 'flex-start',
+              gap: '10px',
+              maxWidth: '850px',
+              margin: '0 auto 20px',
+            }}
+          >
+            {msg.role === 'assistant' && (
+              <div style={{
+                width: '36px', height: '36px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #67E8F9, #06B6D4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: '0 4px 12px rgba(103,232,249,0.3)',
+              }}>
+                <Bot size={18} color="#000" />
+              </div>
+            )}
+
+            <div style={{
+              maxWidth: '85%',
+              padding: '14px 18px',
+              borderRadius: msg.role === 'user'
+                ? '16px 16px 4px 16px'
+                : '16px 16px 16px 4px',
+              background: msg.role === 'user'
+                ? 'linear-gradient(135deg, #10B981, #059669)'
+                : 'rgba(255,255,255,0.05)',
+              border: msg.role === 'user'
+                ? 'none'
+                : '1px solid rgba(255,255,255,0.08)',
+              position: 'relative',
+            }}>
+              <div style={{
+                fontSize: '14px',
+                lineHeight: 1.85,
+                color: msg.role === 'user' ? '#fff' : '#E5E7EB',
+                direction: 'rtl',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}>
+                {msg.content || (msg.streaming && (
+                  <span style={{ display: 'inline-flex', gap: '4px' }}>
+                    <span className="dot" style={{ animationDelay: '0s' }} />
+                    <span className="dot" style={{ animationDelay: '0.2s' }} />
+                    <span className="dot" style={{ animationDelay: '0.4s' }} />
+                  </span>
+                ))}
+                {msg.streaming && msg.content && (
+                  <span style={{
+                    display: 'inline-block',
+                    width: '2px',
+                    height: '14px',
+                    background: '#67E8F9',
+                    marginInlineStart: '2px',
+                    verticalAlign: 'middle',
+                    animation: 'blink 1s infinite',
+                  }} />
+                )}
+              </div>
+
+              {msg.role === 'assistant' && !msg.streaming && msg.content && (
+                <div style={{
+                  display: 'flex',
+                  gap: '6px',
+                  marginTop: '12px',
+                  paddingTop: '10px',
+                  borderTop: '1px solid rgba(255,255,255,0.05)',
+                }}>
+                  <button onClick={() => copyMessage(msg.id, msg.content)} style={{
+                    width: '28px', height: '28px',
+                    borderRadius: '8px',
+                    background: 'rgba(255,255,255,0.04)',
+                    border: 'none',
+                    color: '#9CA3AF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }} className="action-btn" title="نسخ">
+                    {copiedId === msg.id ? <Check size={14} color="#10B981" /> : <Copy size={14} />}
+                  </button>
+
+                  <button onClick={() => speakMessage(msg.id, msg.content)} style={{
+                    width: '28px', height: '28px',
+                    borderRadius: '8px',
+                    background: speaking === msg.id ? 'rgba(103,232,249,0.15)' : 'rgba(255,255,255,0.04)',
+                    border: 'none',
+                    color: speaking === msg.id ? '#67E8F9' : '#9CA3AF',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                  }} className="action-btn" title="استماع">
+                    <Volume2 size={14} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {msg.role === 'user' && (
+              <div style={{
+                width: '36px', height: '36px',
+                borderRadius: '10px',
+                background: `linear-gradient(135deg, ${me.color || '#10B981'}, ${(me.color || '#10B981')}aa)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '14px',
+                fontWeight: 900,
+                flexShrink: 0,
+              }}>
+                {me.avatar || me.name[0]}
+              </div>
+            )}
+          </div>
+        ))}
 
         <div ref={endRef} />
       </div>
 
-      {/* Suggestions */}
-      {messages.length <= 1 && (
-        <div style={{
-          display: 'flex',
-          gap: '8px',
-          overflowX: 'auto',
-          padding: '8px 14px',
-          flexShrink: 0,
-        }}>
-          {SUGGESTIONS.map((s, i) => (
-            <button
-              key={i}
-              onClick={() => send(s)}
-              style={{
-                whiteSpace: 'nowrap',
-                padding: '8px 14px',
-                background: 'var(--bg-3)',
-                border: '1px solid var(--border-2)',
-                borderRadius: '16px',
-                color: 'var(--text-2)',
-                fontSize: '12px',
-                flexShrink: 0,
-              }}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Input - ABOVE bottom nav */}
+      {/* Input */}
       <div style={{
-        padding: '10px 14px',
-        paddingBottom: 'calc(10px + var(--safe-bottom))',
-        background: 'rgba(10,22,40,0.97)',
-        borderTop: '1px solid var(--border-2)',
-        flexShrink: 0,
-        display: 'flex',
-        gap: '10px',
-        alignItems: 'flex-end',
+        padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 100px)',
+        background: 'rgba(0,0,0,0.85)',
+        backdropFilter: 'blur(20px)',
+        borderTop: '1px solid rgba(255,255,255,0.05)',
+        position: 'relative',
+        zIndex: 100,
       }}>
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={e => {
-            setInput(e.target.value);
-            e.target.style.height = 'auto';
-            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-          }}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder="اسأل سؤالاً إسلامياً..."
-          rows={1}
-          style={{
+        <div style={{
+          maxWidth: '850px',
+          margin: '0 auto',
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: '8px',
+        }}>
+          <div style={{
             flex: 1,
-            background: 'var(--bg-3)',
-            border: '1px solid var(--border-2)',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.08)',
             borderRadius: '20px',
-            padding: '10px 16px',
-            color: 'var(--text-0)',
-            fontSize: '14px',
-            resize: 'none',
-            maxHeight: '120px',
-            direction: 'rtl',
-            lineHeight: 1.5,
-            outline: 'none',
-          }}
-        />
-        <button
-          onClick={() => send()}
-          disabled={!input.trim() || loading}
-          style={{
-            width: '44px', height: '44px',
-            borderRadius: '50%',
-            background: input.trim() && !loading
-              ? 'linear-gradient(135deg, var(--green-3), var(--green-5))'
-              : 'var(--bg-3)',
-            color: input.trim() && !loading ? '#fff' : 'var(--text-4)',
+            padding: '4px 14px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            border: 'none',
-            cursor: input.trim() && !loading ? 'pointer' : 'default',
-            transition: 'all 0.2s',
-          }}
-        >
-          <Send size={18} />
-        </button>
+            transition: 'border-color 0.2s',
+          }} className="input-wrapper">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={e => {
+                setInput(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage(input);
+                }
+              }}
+              placeholder="اسأل نور AI أي شيء..."
+              disabled={loading}
+              rows={1}
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                color: '#fff',
+                fontSize: '14px',
+                resize: 'none',
+                maxHeight: '120px',
+                direction: 'rtl',
+                padding: '12px 0',
+                lineHeight: 1.5,
+                outline: 'none',
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+
+          <button
+            onClick={() => sendMessage(input)}
+            disabled={!input.trim() || loading}
+            style={{
+              width: '48px', height: '48px',
+              borderRadius: '50%',
+              background: input.trim() && !loading
+                ? 'linear-gradient(135deg, #67E8F9, #06B6D4)'
+                : 'rgba(255,255,255,0.05)',
+              border: 'none',
+              color: input.trim() && !loading ? '#000' : '#9CA3AF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: input.trim() && !loading ? 'pointer' : 'not-allowed',
+              flexShrink: 0,
+              boxShadow: input.trim() && !loading ? '0 8px 20px rgba(103,232,249,0.5)' : 'none',
+              transition: 'all 0.3s',
+            }}
+            className="send-btn"
+          >
+            {loading ? <Loader2 size={20} className="spin" /> : <Send size={20} />}
+          </button>
+        </div>
+
+        <p style={{
+          textAlign: 'center',
+          fontSize: '10px',
+          color: '#6B7280',
+          marginTop: '8px',
+        }}>
+          ⚡ Noor AI قد يخطئ — تحقّق من المعلومات الشرعية مع أهل العلم
+        </p>
       </div>
+
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(1.1); }
+        }
+        @keyframes blink {
+          0%, 50% { opacity: 1; }
+          51%, 100% { opacity: 0; }
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes msgIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .spin { animation: spin 1s linear infinite; }
+        .msg-anim { animation: msgIn 0.3s ease-out; }
+        .prompt-card:hover {
+          transform: translateY(-2px);
+          border-color: rgba(103,232,249,0.3) !important;
+          background: linear-gradient(135deg, rgba(103,232,249,0.06), rgba(255,255,255,0.02)) !important;
+        }
+        .action-btn:hover {
+          background: rgba(255,255,255,0.08) !important;
+          color: #fff !important;
+        }
+        .send-btn:not(:disabled):hover {
+          transform: scale(1.05);
+        }
+        .input-wrapper:focus-within {
+          border-color: rgba(103,232,249,0.4) !important;
+        }
+        .dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #67E8F9;
+          display: inline-block;
+          animation: bounce 1.2s ease-in-out infinite;
+        }
+        @keyframes bounce {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+          30% { transform: translateY(-6px); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }
