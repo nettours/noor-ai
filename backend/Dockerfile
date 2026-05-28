@@ -1,25 +1,21 @@
-FROM node:20-alpine AS base
-RUN apk add --no-cache libc6-compat openssl
+FROM node:20-alpine
+
 WORKDIR /app
 
-FROM base AS deps
-COPY package.json package-lock.json* ./
+# نسخ package.json
+COPY package.json ./
+
+# تثبيت المكتبات (npm install ينشئ lock file إذا لم يكن موجوداً)
 RUN npm install
 
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+# نسخ بقية الملفات
 COPY . .
+
+# بناء TypeScript
 RUN npm run build
 
-FROM base AS runner
-WORKDIR /app
-ENV NODE_ENV=production
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nodeapp
-COPY --from=builder --chown=nodeapp:nodejs /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
-USER nodeapp
+# Expose port
 EXPOSE 4000
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+
+# تشغيل السيرفر
+CMD ["node", "dist/server.js"]
