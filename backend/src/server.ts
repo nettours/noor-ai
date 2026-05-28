@@ -612,59 +612,83 @@ const io = new Server(httpServer, {
 // 🤖 دالة رد البوت بالذكاء الاصطناعي
 // ═══════════════════════════════════════════════════════
 async function botReplyAI(botIdx: number, conversationId: string, userMessage: string, isRoom: boolean) {
-  const bot = users.get('bot_' + botIdx);
-  const personality = BOT_PERSONALITIES[botIdx];
-  if (!bot || !personality) return;
+  try {
+    const bot = users.get('bot_' + botIdx);
+    const personality = BOT_PERSONALITIES[botIdx];
+    if (!bot || !personality) return;
 
-  // Build conversation context
-  const msgList = isRoom ? roomMessages.get(conversationId) || [] : messages.get(conversationId) || [];
-  const recentContext = msgList.slice(-6).map(m => ({
-    role: (m.senderId === bot.id ? 'assistant' : 'user') as 'assistant' | 'user',
-    content: m.content,
-  }));
+    // Build conversation context
+    const msgList = isRoom ? roomMessages.get(conversationId) || [] : messages.get(conversationId) || [];
+    const recentContext = msgList.slice(-6).map(m => ({
+      role: (m.senderId === bot.id ? 'assistant' : 'user') as 'assistant' | 'user',
+      content: m.content,
+    }));
 
-  // typing indicator
-  const emitTo = isRoom ? 'room:' + conversationId : 'chat:' + conversationId;
-  const typingEvent = isRoom ? 'room:typing' : 'chat:typing';
-  io.to(emitTo).emit(typingEvent, {
-    roomId: conversationId, userId: bot.id, userName: bot.name, isTyping: true,
-  });
+    // typing indicator
+    const emitTo = isRoom ? 'room:' + conversationId : 'chat:' + conversationId;
+    const typingEvent = isRoom ? 'room:typing' : 'chat:typing';
+    try {
+      io.to(emitTo).emit(typingEvent, {
+        roomId: conversationId, userId: bot.id, userName: bot.name, isTyping: true,
+      });
+    } catch (e) { console.error('typing emit error:', e); }
 
-  // Get AI response
-  let replyText = await getAIResponse(personality.system, userMessage, recentContext);
+    // Get AI response (with extra safety)
+    let replyText: string | null = null;
+    try {
+      replyText = await getAIResponse(personality.system, userMessage, recentContext);
+    } catch (aiErr) {
+      console.error('getAIResponse error:', aiErr);
+      replyText = null;
+    }
 
-  // Fallback
-  if (!replyText) {
-    replyText = FALLBACK_REPLIES[Math.floor(Math.random() * FALLBACK_REPLIES.length)];
+    // Fallback
+    if (!replyText) {
+      replyText = FALLBACK_REPLIES[Math.floor(Math.random() * FALLBACK_REPLIES.length)];
+    }
+
+    // Stop typing
+    try {
+      io.to(emitTo).emit(typingEvent, {
+        roomId: conversationId, userId: bot.id, userName: bot.name, isTyping: false,
+      });
+    } catch (e) { console.error('stop typing error:', e); }
+
+    // Send the reply
+    const botMsg: ChatMessage = {
+      id: 'msg_bot_ai_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      conversationId,
+      senderId: bot.id, senderName: bot.name,
+      senderAvatar: bot.avatar, senderColor: bot.color,
+      type: 'text', content: replyText,
+      createdAt: new Date().toISOString(), status: 'sent',
+    };
+
+    if (isRoom) {
+      const list = roomMessages.get(conversationId) || [];
+      list.push(botMsg);
+      if (list.length > 500) list.splice(0, list.length - 500);
+      roomMessages.set(conversationId, list);
+      io.to('room:' + conversationId).emit('room:message', botMsg);
+    } else {
+      const list = messages.get(conversationId) || [];
+      list.push(botMsg);
+      messages.set(conversationId, list);
+      io.to('chat:' + conversationId).emit('chat:message', botMsg);
+    }
+  } catch (err) {
+    console.error('🔥 botReplyAI fatal error (caught):', err);
+    // لا نرمي الخطأ - فقط نسجّله ونستمر
   }
+}
 
-  // Stop typing
-  io.to(emitTo).emit(typingEvent, {
-    roomId: conversationId, userId: bot.id, userName: bot.name, isTyping: false,
-  });
-
-  // Send the reply
-  const botMsg: ChatMessage = {
-    id: 'msg_bot_ai_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-    conversationId,
-    senderId: bot.id, senderName: bot.name,
-    senderAvatar: bot.avatar, senderColor: bot.color,
-    type: 'text', content: replyText,
-    createdAt: new Date().toISOString(), status: 'sent',
-  };
-
-  if (isRoom) {
-    const list = roomMessages.get(conversationId) || [];
-    list.push(botMsg);
-    if (list.length > 500) list.splice(0, list.length - 500);
-    roomMessages.set(conversationId, list);
-    io.to('room:' + conversationId).emit('room:message', botMsg);
-  } else {
-    const list = messages.get(conversationId) || [];
-    list.push(botMsg);
-    messages.set(conversationId, list);
-    io.to('chat:' + conversationId).emit('chat:message', botMsg);
-  }
+// safe wrapper for setTimeout async calls
+function safeBotReply(botIdx: number, conversationId: string, userMessage: string, isRoom: boolean, delay: number) {
+  setTimeout(() => {
+    botReplyAI(botIdx, conversationId, userMessage, isRoom).catch(err => {
+      console.error('safeBotReply caught:', err);
+    });
+  }, delay);
 }
 
 io.on('connection', (socket) => {
@@ -698,10 +722,8 @@ io.on('connection', (socket) => {
     const otherUser = users.get(otherUserId);
     if (otherUser && otherUser.isBot) {
       const botIdx = parseInt(otherUserId.replace('bot_', ''));
-      // delay قبل الرد
-      setTimeout(() => {
-        botReplyAI(botIdx, msg.conversationId, msg.content, false);
-      }, 2000 + Math.random() * 2000);
+      // delay قبل الرد (مع حماية)
+      safeBotReply(botIdx, msg.conversationId, msg.content, false, 2000 + Math.random() * 2000);
     }
   });
 
@@ -758,9 +780,7 @@ io.on('connection', (socket) => {
       const botId = botMembers[Math.floor(Math.random() * botMembers.length)];
       const botIdx = parseInt(botId.replace('bot_', ''));
 
-      setTimeout(() => {
-        botReplyAI(botIdx, roomId, msg.content, true);
-      }, 2500 + Math.random() * 3000);
+      safeBotReply(botIdx, roomId, msg.content, true, 2500 + Math.random() * 3000);
     }
   });
 
@@ -797,6 +817,31 @@ io.on('connection', (socket) => {
       if (u) u.lastSeen = new Date().toISOString();
       io.emit('user:status', { userId, online: false });
     }
+  });
+});
+
+// ═══════════════════════════════════════════════════════
+// 🛡️ حماية السيرفر من أي خطأ يقتل العملية
+// ═══════════════════════════════════════════════════════
+process.on('uncaughtException', (err) => {
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.error('🚨 UNCAUGHT EXCEPTION (server stays alive):');
+  console.error(err);
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.error('🚨 UNHANDLED REJECTION (server stays alive):');
+  console.error('Reason:', reason);
+  console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+});
+
+process.on('SIGTERM', () => {
+  console.log('📛 SIGTERM received - graceful shutdown');
+  httpServer.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
   });
 });
 
