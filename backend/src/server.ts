@@ -881,13 +881,37 @@ io.on('connection', (socket) => {
 
   socket.on('room:leave', ({ roomId }: any) => socket.leave('room:' + roomId));
 
-  socket.on('room:send', async ({ roomId, message }: any, callback: any) => {
+  socket.on('room:send', async ({ roomId, message, sender }: any, callback: any) => {
     const room = rooms.get(roomId);
-    if (!room) { if (callback) callback({ success: false }); return; }
-    const userId = socket.data.userId;
-    if (!userId) { if (callback) callback({ success: false }); return; }
-    const user = users.get(userId);
-    if (!user) { if (callback) callback({ success: false }); return; }
+    if (!room) { if (callback) callback({ success: false, error: 'room not found' }); return; }
+
+    // محاولة الحصول على المستخدم: من socket.data أو من sender المرسل
+    let userId = socket.data.userId;
+    let user = userId ? users.get(userId) : null;
+
+    // احتياطي: إذا socket.data فارغ، استخدم بيانات sender من الرسالة
+    if (!user && sender?.id) {
+      userId = sender.id;
+      user = users.get(userId) || {
+        id: sender.id,
+        name: sender.name || 'مستخدم',
+        avatar: sender.avatar || sender.name?.[0] || '?',
+        color: sender.color || '#10B981',
+      } as User;
+      // اضبط socket.data للمستقبل
+      socket.data.userId = userId;
+      socket.data.userName = user.name;
+    }
+
+    if (!user) {
+      console.error('🔥 room:send rejected - no user. socket.data:', socket.data, 'sender:', sender);
+      if (callback) callback({ success: false, error: 'no user identity' });
+      return;
+    }
+
+    // تأكّد أن المستخدم عضو في الغرفة وانضم للـ socket room
+    room.members.add(userId);
+    socket.join('room:' + roomId);
 
     const msg: ChatMessage = {
       id: message.id || 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
@@ -901,6 +925,8 @@ io.on('connection', (socket) => {
       createdAt: new Date().toISOString(),
       status: 'sent',
     };
+
+    console.log('💬 room:send', roomId, 'from', user.name, ':', message.content?.slice(0, 30));
 
     const list = roomMessages.get(roomId) || [];
     list.push(msg);
