@@ -108,26 +108,35 @@ export default function FeedPage() {
 
   const speak = (post: Post) => {
     if (!post.text) return;
+    const synth = window.speechSynthesis;
+    if (!synth) { alert('متصفحك لا يدعم الصوت'); return; }
+
+    // إذا نفس المنشور يتكلّم → أوقفه
     if (speaking === post.id) {
-      window.speechSynthesis?.cancel();
+      synth.cancel();
       setSpeaking(null);
       return;
     }
-    window.speechSynthesis?.cancel();
-    // تقسيم النص لتجنّب توقّف الصوت الطويل
-    const chunks = post.text.match(/[^.!?،\n]+[.!?،\n]*/g) || [post.text];
-    let i = 0;
-    const next = () => {
-      if (i >= chunks.length) { setSpeaking(null); return; }
-      const u = new SpeechSynthesisUtterance(chunks[i]);
-      u.lang = 'ar-SA';
-      u.rate = 0.85;
-      u.onend = () => { i++; next(); };
-      u.onerror = () => setSpeaking(null);
-      window.speechSynthesis.speak(u);
-    };
-    setSpeaking(post.id);
-    next();
+
+    // أوقف أي صوت سابق تماماً
+    synth.cancel();
+
+    // مهلة قصيرة لضمان إلغاء الصوت السابق قبل البدء (إصلاح "أول واحد فقط")
+    setTimeout(() => {
+      const chunks = post.text.match(/[^.!?،\n]+[.!?،\n]*/g)?.filter(c => c.trim()) || [post.text];
+      let idx = 0;
+      const speakChunk = () => {
+        if (idx >= chunks.length) { setSpeaking(null); return; }
+        const u = new SpeechSynthesisUtterance(chunks[idx].trim());
+        u.lang = 'ar-SA';
+        u.rate = 0.85;
+        u.onend = () => { idx++; speakChunk(); };
+        u.onerror = () => { idx++; speakChunk(); }; // تابع رغم الخطأ
+        synth.speak(u);
+      };
+      setSpeaking(post.id);
+      speakChunk();
+    }, 120);
   };
 
   const timeAgo = (iso: string) => {
