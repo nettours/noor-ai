@@ -145,7 +145,7 @@ export default function CreatePostPage() {
       </header>
 
       {/* المحتوى القابل للتمرير */}
-      <div style={{ flex: 1, overflowY: 'auto', position: 'relative', zIndex: 2, padding: '20px 16px', maxWidth: '600px', margin: '0 auto', width: '100%' }}>
+      <div style={{ flex: 1, overflowY: 'auto', position: 'relative', zIndex: 2, padding: '20px 16px 140px', maxWidth: '600px', margin: '0 auto', width: '100%' }}>
         {/* نوع المحتوى */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
           {[
@@ -255,11 +255,13 @@ export default function CreatePostPage() {
       </div>
 
       {/* زر النشر (ثابت دائماً في الأسفل) */}
+      {/* زر النشر (مثبّت على قاع الشاشة - يتغلّب على أي شريط) */}
       <div style={{
-        position: 'relative', zIndex: 10,
+        position: 'fixed', left: 0, right: 0, bottom: 0,
+        zIndex: 2147483647,
         padding: '14px 16px calc(env(safe-area-inset-bottom, 0px) + 16px)',
-        background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(20px)',
-        borderTop: '1px solid rgba(255,255,255,0.05)',
+        background: 'rgba(0,0,0,0.92)', backdropFilter: 'blur(20px)',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
       }}>
         <button onClick={publish} disabled={publishing || !canPublish} style={{
           width: '100%', maxWidth: '600px', margin: '0 auto',
