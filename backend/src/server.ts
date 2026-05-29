@@ -701,36 +701,105 @@ app.get('/api/feed', auth, (req: any, res: Response) => {
 
 // إنشاء منشور جديد
 app.post('/api/feed', auth, (req: any, res: Response): any => {
-  const { kind, text, mediaUrl, category } = req.body;
+  try {
+    const { kind, text, mediaUrl, category } = req.body;
+    const user = users.get(req.userId);
+    if (!user) {
+      console.error('🔥 feed POST: no user for', req.userId);
+      return res.status(401).json({ success: false, error: 'المستخدم غير موجود - أعد تسجيل الدخول' });
+    }
+
+    const k = kind || 'text';
+    // تحقّق مرن
+    if (k === 'text' && (!text || !text.trim())) {
+      return res.status(400).json({ success: false, error: 'اكتب نصاً أولاً' });
+    }
+    if ((k === 'image' || k === 'video') && !mediaUrl) {
+      return res.status(400).json({ success: false, error: 'لم يتم رفع الوسائط (رابط فارغ)' });
+    }
+
+    const id = 'post_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const post: FeedPost = {
+      id,
+      authorId: user.id,
+      authorName: user.name,
+      authorAvatar: user.avatar,
+      authorColor: user.color,
+      kind: k,
+      text: (text || '').trim(),
+      mediaUrl: mediaUrl || undefined,
+      category: category || 'خاطرة',
+      gradient: FEED_GRADIENTS[Math.floor(Math.random() * FEED_GRADIENTS.length)],
+      likes: new Set(),
+      createdAt: new Date().toISOString(),
+    };
+    feedPosts.set(id, post);
+    console.log('🔥 New feed post by', user.name, '-', k, '- media:', mediaUrl ? 'yes' : 'no');
+    res.json({ success: true, post: { id } });
+  } catch (err: any) {
+    console.error('🔥 feed POST error:', err);
+    res.status(500).json({ success: false, error: 'خطأ في الخادم: ' + (err.message || '') });
+  }
+});
+
+// 🤖 توليد محتوى إسلامي مؤثّر بـ Gemini
+app.post('/api/feed/generate', auth, async (req: any, res: Response): Promise<any> => {
   const user = users.get(req.userId);
   if (!user) return res.status(401).json({ success: false });
 
-  // تحقّق: نص مطلوب للنوع text، رابط مطلوب للصورة/الفيديو
-  if (kind === 'text' && (!text || !text.trim())) {
-    return res.status(400).json({ success: false, error: 'النص مطلوب' });
-  }
-  if ((kind === 'image' || kind === 'video') && !mediaUrl) {
-    return res.status(400).json({ success: false, error: 'الوسائط مطلوبة' });
-  }
+  const apiKey = process.env.GEMINI_API_KEY;
+  const topic = req.body?.topic || '';
 
-  const id = 'post_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  const post: FeedPost = {
-    id,
-    authorId: user.id,
-    authorName: user.name,
-    authorAvatar: user.avatar,
-    authorColor: user.color,
-    kind: kind || 'text',
-    text: (text || '').trim(),
-    mediaUrl: mediaUrl || undefined,
-    category: category || 'خاطرة',
-    gradient: FEED_GRADIENTS[Math.floor(Math.random() * FEED_GRADIENTS.length)],
-    likes: new Set(),
-    createdAt: new Date().toISOString(),
-  };
-  feedPosts.set(id, post);
-  console.log('🔥 New feed post by', user.name, '-', kind);
-  res.json({ success: true, post: { id } });
+  // محتوى احتياطي مؤثّر (إذا لا AI)
+  const FALLBACK_POSTS = [
+    { text: 'إذا ضاقت بك الدنيا، تذكّر أن الذي خلق الضيق خلق الفرج. ﴿إِنَّ مَعَ الْعُسْرِ يُسْرًا﴾', category: 'خاطرة' },
+    { text: 'لا تجعل قلبك معلّقاً بمن يرحل، بل بمن لا يموت ولا ينام. تعلّق بالله وحده.', category: 'نصيحة' },
+    { text: 'كل سجدة تقرّبك من الله خطوة، وكل دمعة خشية تمحو ذنباً. لا تستهن بصلاتك.', category: 'خاطرة' },
+    { text: 'الشاب الذي ينشأ في عبادة الله، يظلّه الله في يوم لا ظلّ إلا ظله. اغتنم شبابك.', category: 'نصيحة' },
+    { text: '﴿وَمَن يَتَوَكَّلْ عَلَى اللَّهِ فَهُوَ حَسْبُهُ﴾ — من جعل الله وكيله، كفاه كل شيء.', category: 'آية' },
+  ];
+
+  try {
+    if (!apiKey) {
+      const f = FALLBACK_POSTS[Math.floor(Math.random() * FALLBACK_POSTS.length)];
+      return res.json({ success: true, generated: f });
+    }
+
+    const prompt = `اكتب منشوراً إسلامياً قصيراً مؤثّراً جداً يلمس قلوب الشباب${topic ? ` عن: ${topic}` : ''}.
+الشروط:
+- جملة أو جملتين فقط (لا يتجاوز 30 كلمة)
+- مؤثّر، عميق، يحرّك المشاعر
+- يمكن أن يحتوي آية أو حديثاً قصيراً
+- بالعربية الفصحى الجميلة
+- بدون مقدمات، فقط المنشور مباشرة
+
+أعطني فقط المنشور بدون أي شرح أو علامات اقتباس.`;
+
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 200, temperature: 1.0 },
+        }),
+      }
+    );
+    const data: any = await r.json();
+    const generated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+    if (generated) {
+      const cats = ['خاطرة', 'آية', 'حديث', 'نصيحة', 'حكمة'];
+      res.json({ success: true, generated: { text: generated, category: topic ? 'خاطرة' : cats[Math.floor(Math.random() * cats.length)] } });
+    } else {
+      const f = FALLBACK_POSTS[Math.floor(Math.random() * FALLBACK_POSTS.length)];
+      res.json({ success: true, generated: f });
+    }
+  } catch (err) {
+    const f = FALLBACK_POSTS[Math.floor(Math.random() * FALLBACK_POSTS.length)];
+    res.json({ success: true, generated: f });
+  }
 });
 
 // إعجاب / إلغاء إعجاب
