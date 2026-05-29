@@ -68,6 +68,7 @@ export default function HomePage() {
     { href: '/adhkar', icon: Heart, title: 'الأذكار', desc: 'حصن المسلم', color: '#34D399' },
     { href: '/tasbih', icon: Sparkles, title: 'التسبيح', desc: 'سبحة رقمية', color: '#60A5FA' },
     { href: '/stories', icon: Star, title: 'قصص الأنبياء', desc: '25 قصة بالصوت 🔊', color: '#FB923C', badge: 'صوت 🎙️' },
+    { href: '/feed', icon: Sparkles, title: 'تأمّلات نور', desc: 'آيات وأذكار يومية 🔥', color: '#EC4899', badge: 'جديد 🔥' },
   ];
 
   return (
