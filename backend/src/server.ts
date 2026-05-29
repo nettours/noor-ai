@@ -336,6 +336,36 @@ app.get('/', (_req, res) => res.json({ message: '🌙 Noor AI - Intelligent Back
 app.get('/api/daily', (_req, res) => res.json({ success: true, ...getTodayContent() }));
 
 // ═══════════════════════════════════════════════════════
+// 📋 LIST MODELS - يعرض النماذج المتاحة لمفتاحك
+// ═══════════════════════════════════════════════════════
+app.get('/api/ai/models', async (_req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return res.json({ error: 'GEMINI_API_KEY مفقود' });
+  }
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
+    );
+    const data: any = await resp.json();
+    // أعرض فقط النماذج التي تدعم generateContent
+    const usable = (data.models || [])
+      .filter((m: any) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m: any) => ({
+        name: m.name?.replace('models/', ''),
+        displayName: m.displayName,
+      }));
+    res.json({
+      total: data.models?.length || 0,
+      usableForChat: usable,
+      hint: '👉 استخدم أحد الأسماء في usableForChat',
+    });
+  } catch (err: any) {
+    res.json({ error: err.message || String(err) });
+  }
+});
+
+// ═══════════════════════════════════════════════════════
 // 🔬 AI TEST endpoint - لتشخيص مشاكل Gemini API
 // ═══════════════════════════════════════════════════════
 app.get('/api/ai/test', async (_req, res) => {
