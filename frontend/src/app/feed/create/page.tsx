@@ -123,7 +123,7 @@ export default function CreatePostPage() {
   const canPublish = kind === 'text' ? text.trim().length > 0 : !!mediaUrl;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000', color: '#fff', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', inset: 0, background: '#000', color: '#fff', display: 'flex', flexDirection: 'column', zIndex: 9999 }}>
       <div style={{ position: 'absolute', inset: 0, zIndex: 0, background: 'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(236,72,153,0.12) 0%, transparent 50%), #000' }} />
 
       {/* Header (ثابت) */}
