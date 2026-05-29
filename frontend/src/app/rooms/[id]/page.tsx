@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
-import { Send, ArrowRight, Users, Video, X, Lock } from 'lucide-react';
+import { Send, ArrowRight, Users, Video, X } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 const BACKEND = API.replace('/api', '');
@@ -26,8 +26,7 @@ export default function RoomPage() {
   const [showMembers, setShowMembers] = useState(false);
   const [showCall, setShowCall] = useState(false);
   const [typingNames, setTypingNames] = useState<string[]>([]);
-  const [socket, setSocket] = useState<Socket | null>(null);
-
+  const socketRef = useRef<Socket | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<any>(null);
 
@@ -36,7 +35,7 @@ export default function RoomPage() {
       const token = localStorage.getItem('noor_token');
       const u = JSON.parse(localStorage.getItem('noor_user') || '{}');
       if (!token || !u.id) { router.push('/auth/login'); return; }
-      setMe({ id: u.id, name: u.name, token, avatar: u.avatar, color: u.color });
+      setMe({ id: u.id, name: u.name, token, avatar: u.avatar || u.name?.[0] || '?', color: u.color || '#10B981' });
     } catch { router.push('/auth/login'); }
   }, []);
 
@@ -51,18 +50,21 @@ export default function RoomPage() {
   useEffect(() => {
     if (!me?.id || !roomId) return;
     const s = io(BACKEND, { transports: ['websocket', 'polling'] });
-    setSocket(s);
+    socketRef.current = s;
 
-    s.on('connect', () => {
+    const goOnline = () => {
       s.emit('user:online', { userId: me.id, userName: me.name });
       s.emit('room:join', { roomId });
-    });
+    };
 
-    s.on('room:history', (msgs: Message[]) => setMessages(msgs));
+    s.on('connect', goOnline);
+    s.on('reconnect', goOnline);
+
+    s.on('room:history', (msgs: Message[]) => setMessages(msgs || []));
 
     s.on('room:message', (msg: Message) => {
       setMessages(prev => {
-        // إذا الرسالة موجودة أو من نفسي (pending)، استبدلها بالمؤكدة
+        // استبدل النسخة المعلّقة (pending) من نفس المستخدم بنفس المحتوى
         const pendingIdx = prev.findIndex(m => m._pending && m.senderId === msg.senderId && m.content === msg.content);
         if (pendingIdx !== -1) {
           const updated = [...prev];
@@ -75,7 +77,10 @@ export default function RoomPage() {
     });
 
     s.on('room:typing', ({ userName, isTyping }: any) => {
-      setTypingNames(prev => isTyping ? Array.from(new Set([...prev, userName])) : prev.filter(n => n !== userName));
+      if (!userName || userName === me.name) return;
+      setTypingNames(prev => isTyping
+        ? Array.from(new Set([...prev, userName]))
+        : prev.filter(n => n !== userName));
     });
 
     return () => {
@@ -89,40 +94,44 @@ export default function RoomPage() {
   }, [messages, typingNames]);
 
   const send = () => {
-    if (!input.trim() || !socket || !me) return;
     const content = input.trim();
+    const s = socketRef.current;
+    if (!content || !s || !me) return;
+
     const tempId = 'tmp_' + Date.now();
 
-    // ⭐ OPTIMISTIC UPDATE: أضف الرسالة فوراً للعرض
-    const optimisticMsg: Message = {
+    // Optimistic: أظهر الرسالة فوراً
+    const optimistic: Message = {
       id: tempId,
       senderId: me.id,
       senderName: me.name,
-      senderAvatar: me.avatar || me.name[0],
-      senderColor: me.color || '#10B981',
+      senderAvatar: me.avatar,
+      senderColor: me.color,
       type: 'text',
-      content: content,
+      content,
       createdAt: new Date().toISOString(),
       _pending: true,
     };
-    setMessages(prev => [...prev, optimisticMsg]);
+    setMessages(prev => [...prev, optimistic]);
 
-    // أرسل للسيرفر
-    socket.emit('room:send', {
+    // أرسل مع بيانات المرسل (sender) لضمان قبول الـ Backend
+    s.emit('room:send', {
       roomId,
-      message: { id: tempId, type: 'text', content }
+      message: { id: tempId, type: 'text', content },
+      sender: { id: me.id, name: me.name, avatar: me.avatar, color: me.color },
     });
 
     setInput('');
-    socket.emit('room:typing', { roomId, isTyping: false });
+    s.emit('room:typing', { roomId, isTyping: false });
   };
 
   const onTyping = () => {
-    if (!socket) return;
-    socket.emit('room:typing', { roomId, isTyping: true });
+    const s = socketRef.current;
+    if (!s) return;
+    s.emit('room:typing', { roomId, isTyping: true });
     clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('room:typing', { roomId, isTyping: false });
+      s.emit('room:typing', { roomId, isTyping: false });
     }, 2000);
   };
 
@@ -140,202 +149,76 @@ export default function RoomPage() {
     );
   }
 
-  // JITSI GROUP CALL
   if (showCall) {
     const jitsiUrl = `https://meet.jit.si/noor-ai-${roomId}#userInfo.displayName="${encodeURIComponent(me.name)}"&config.prejoinPageEnabled=false`;
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
-        <div style={{
-          padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px',
-          background: 'rgba(0,0,0,0.9)',
-          display: 'flex', alignItems: 'center', gap: '12px',
-          borderBottom: '1px solid rgba(255,255,255,0.1)',
-        }}>
-          <button onClick={() => setShowCall(false)} style={{
-            width: '40px', height: '40px',
-            borderRadius: '50%', background: '#EF4444',
-            border: 'none', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-          }}>
+        <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px', background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+          <button onClick={() => setShowCall(false)} style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EF4444', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <X size={20} />
           </button>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>
-              📹 مكالمة جماعية: {room.name}
-            </div>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>📹 مكالمة جماعية: {room.name}</div>
             <div style={{ fontSize: '11px', color: '#9CA3AF' }}>مدعومة بـ Jitsi Meet</div>
           </div>
         </div>
-        <iframe
-          src={jitsiUrl}
-          style={{ flex: 1, width: '100%', border: 'none' }}
-          allow="camera; microphone; fullscreen; display-capture; autoplay"
-        />
+        <iframe src={jitsiUrl} style={{ flex: 1, width: '100%', border: 'none' }} allow="camera; microphone; fullscreen; display-capture; autoplay" />
       </div>
     );
   }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0,
-      background: '#000', color: '#fff',
-      display: 'flex', flexDirection: 'column',
-      overflow: 'hidden', zIndex: 9999,
-    }}>
-      <div style={{
-        position: 'absolute', top: 0, left: 0, right: 0,
-        height: '300px',
-        background: `radial-gradient(ellipse at top, ${room.color}22, transparent 70%)`,
-        pointerEvents: 'none',
-      }} />
+    <div style={{ position: 'fixed', inset: 0, background: '#000', color: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 9999 }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '300px', background: `radial-gradient(ellipse at top, ${room.color}22, transparent 70%)`, pointerEvents: 'none' }} />
 
       {/* Header */}
-      <header style={{
-        padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px',
-        background: 'rgba(0,0,0,0.7)',
-        backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
-        display: 'flex', alignItems: 'center', gap: '12px',
-        position: 'relative', zIndex: 10,
-      }}>
-        <button onClick={() => router.push('/rooms')} style={{
-          width: '36px', height: '36px',
-          borderRadius: '10px',
-          background: 'rgba(255,255,255,0.05)',
-          border: 'none', color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer',
-        }}>
+      <header style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '12px', position: 'relative', zIndex: 10 }}>
+        <button onClick={() => router.push('/rooms')} style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <ArrowRight size={20} />
         </button>
-
-        <div style={{
-          width: '40px', height: '40px',
-          borderRadius: '12px',
-          background: `linear-gradient(135deg, ${room.color}, ${room.color}aa)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '20px',
-          boxShadow: `0 4px 16px ${room.color}66`,
-          flexShrink: 0,
-        }}>{room.icon}</div>
-
+        <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: `linear-gradient(135deg, ${room.color}, ${room.color}aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>{room.icon}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h2 style={{ fontSize: '15px', fontWeight: 800 }}>{room.name}</h2>
-          <p style={{ fontSize: '11px', color: '#9CA3AF' }}>
-            {room.memberCount} عضو • {room.members?.filter((m: any) => m.online).length || 0} متصل
-          </p>
+          <p style={{ fontSize: '11px', color: '#9CA3AF' }}>{room.memberCount} عضو • {room.members?.filter((m: any) => m.online).length || 0} متصل</p>
         </div>
-
-        <button onClick={() => setShowCall(true)} style={{
-          padding: '8px 14px',
-          borderRadius: '12px',
-          background: 'linear-gradient(135deg, #10B981, #059669)',
-          border: 'none', color: '#fff',
-          display: 'flex', alignItems: 'center', gap: '6px',
-          cursor: 'pointer',
-          fontSize: '12px', fontWeight: 700,
-          boxShadow: '0 4px 14px rgba(16,185,129,0.4)',
-        }}>
-          <Video size={16} />
-          مكالمة
+        <button onClick={() => setShowCall(true)} style={{ padding: '8px 14px', borderRadius: '12px', background: 'linear-gradient(135deg, #10B981, #059669)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>
+          <Video size={16} /> مكالمة
         </button>
-
-        <button onClick={() => setShowMembers(true)} style={{
-          width: '36px', height: '36px',
-          borderRadius: '10px',
-          background: 'rgba(255,255,255,0.05)',
-          border: 'none', color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer',
-        }}>
+        <button onClick={() => setShowMembers(true)} style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <Users size={18} />
         </button>
       </header>
 
       {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', position: 'relative', zIndex: 2 }}>
-        <div style={{ textAlign: 'center', padding: '24px', marginBottom: '16px' }}>
-          <div style={{
-            width: '70px', height: '70px',
-            margin: '0 auto 12px',
-            borderRadius: '20px',
-            background: `linear-gradient(135deg, ${room.color}, ${room.color}aa)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '36px',
-            boxShadow: `0 12px 32px ${room.color}55`,
-          }}>{room.icon}</div>
-          <h3 style={{ fontSize: '18px', fontWeight: 800, marginBottom: '4px' }}>
-            مرحباً بك في {room.name}
-          </h3>
-          <p style={{ fontSize: '12px', color: '#6B7280', maxWidth: '400px', margin: '0 auto' }}>
-            {room.description}
-          </p>
+        <div style={{ textAlign: 'center', padding: '20px', marginBottom: '12px' }}>
+          <div style={{ width: '64px', height: '64px', margin: '0 auto 10px', borderRadius: '18px', background: `linear-gradient(135deg, ${room.color}, ${room.color}aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px' }}>{room.icon}</div>
+          <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '4px' }}>{room.name}</h3>
+          <p style={{ fontSize: '12px', color: '#6B7280' }}>{room.description}</p>
         </div>
-
-        {messages.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '20px', color: '#6B7280', fontSize: '12px' }}>
-            لا توجد رسائل بعد. كن أول من يكتب! 👋
-          </div>
-        )}
 
         {messages.map((m, i) => {
           const fromMe = m.senderId === me?.id;
           const prev = messages[i - 1];
           const showAvatar = !prev || prev.senderId !== m.senderId;
           const senderColor = m.senderColor || '#10B981';
-          const senderAvatar = m.senderAvatar || m.senderName[0];
+          const senderAvatar = m.senderAvatar || m.senderName?.[0] || '?';
 
           return (
-            <div
-              key={m.id}
-              className="msg-bubble"
-              style={{
-                display: 'flex',
-                justifyContent: fromMe ? 'flex-start' : 'flex-end',
-                marginBottom: showAvatar ? '12px' : '2px',
-                alignItems: 'flex-end',
-                gap: '8px',
-                opacity: m._pending ? 0.7 : 1,
-              }}
-            >
+            <div key={m.id} className="msg-bubble" style={{ display: 'flex', justifyContent: fromMe ? 'flex-start' : 'flex-end', marginBottom: showAvatar ? '12px' : '2px', alignItems: 'flex-end', gap: '8px', opacity: m._pending ? 0.7 : 1 }}>
               {!fromMe && (
                 <div style={{ width: '32px', flexShrink: 0 }}>
                   {showAvatar && (
-                    <div style={{
-                      width: '32px', height: '32px',
-                      borderRadius: '50%',
-                      background: `linear-gradient(135deg, ${senderColor}, ${senderColor}aa)`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '13px', fontWeight: 900,
-                    }}>{senderAvatar}</div>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: `linear-gradient(135deg, ${senderColor}, ${senderColor}aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 900 }}>{senderAvatar}</div>
                   )}
                 </div>
               )}
-
-              <div style={{
-                maxWidth: '75%',
-                padding: '10px 14px',
-                borderRadius: fromMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                background: fromMe
-                  ? `linear-gradient(135deg, ${room.color}, ${room.color}cc)`
-                  : 'rgba(255,255,255,0.06)',
-                border: fromMe ? 'none' : '1px solid rgba(255,255,255,0.08)',
-              }}>
+              <div style={{ maxWidth: '75%', padding: '10px 14px', borderRadius: fromMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px', background: fromMe ? `linear-gradient(135deg, ${room.color}, ${room.color}cc)` : 'rgba(255,255,255,0.06)', border: fromMe ? 'none' : '1px solid rgba(255,255,255,0.08)' }}>
                 {!fromMe && showAvatar && (
-                  <div style={{ fontSize: '11px', fontWeight: 800, color: senderColor, marginBottom: '4px' }}>
-                    {m.senderName}
-                  </div>
+                  <div style={{ fontSize: '11px', fontWeight: 800, color: senderColor, marginBottom: '4px' }}>{m.senderName}</div>
                 )}
-                <div style={{
-                  fontSize: '14px', lineHeight: 1.5,
-                  color: fromMe ? '#fff' : '#E5E7EB',
-                  direction: 'rtl', wordBreak: 'break-word',
-                }}>
-                  {m.content}
-                </div>
-                <div style={{ fontSize: '9px', opacity: 0.6, marginTop: '4px', textAlign: 'left' }}>
-                  {fmtTime(m.createdAt)} {m._pending && '⏳'}
-                </div>
+                <div style={{ fontSize: '14px', lineHeight: 1.5, color: fromMe ? '#fff' : '#E5E7EB', direction: 'rtl', wordBreak: 'break-word' }}>{m.content}</div>
+                <div style={{ fontSize: '9px', opacity: 0.6, marginTop: '4px', textAlign: 'left' }}>{fmtTime(m.createdAt)} {m._pending && '⏳'}</div>
               </div>
             </div>
           );
@@ -343,152 +226,44 @@ export default function RoomPage() {
 
         {typingNames.length > 0 && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-            <div style={{
-              padding: '10px 14px',
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '16px 16px 16px 4px',
-              fontSize: '11px', color: '#9CA3AF',
-            }}>
+            <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px 16px 16px 4px', fontSize: '11px', color: '#9CA3AF' }}>
               {typingNames.join(', ')} يكتب...
             </div>
           </div>
         )}
-
         <div ref={endRef} />
       </div>
 
-      {/* Input - مع padding كبير في الأسفل لمنع BottomNav من تغطيته */}
-      <div style={{
-        padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 100px)',
-        background: 'rgba(0,0,0,0.85)',
-        backdropFilter: 'blur(20px)',
-        borderTop: '1px solid rgba(255,255,255,0.05)',
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: '8px',
-        position: 'relative',
-        zIndex: 100,
-      }}>
-        <div style={{
-          flex: 1,
-          background: 'rgba(255,255,255,0.05)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '20px',
-          padding: '4px 14px',
-          display: 'flex',
-          alignItems: 'center',
-        }}>
+      {/* Input */}
+      <div style={{ padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 100px)', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'flex-end', gap: '8px', position: 'relative', zIndex: 100 }}>
+        <div style={{ flex: 1, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '20px', padding: '4px 14px', display: 'flex', alignItems: 'center' }}>
           <textarea
             value={input}
-            onChange={e => {
-              setInput(e.target.value);
-              onTyping();
-              e.target.style.height = 'auto';
-              e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
-            }}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
+            onChange={e => { setInput(e.target.value); onTyping(); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px'; }}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
             placeholder="اكتب رسالة..."
             rows={1}
-            style={{
-              flex: 1,
-              background: 'transparent',
-              border: 'none',
-              color: '#fff',
-              fontSize: '14px',
-              resize: 'none',
-              maxHeight: '100px',
-              direction: 'rtl',
-              padding: '10px 0',
-              lineHeight: 1.5,
-              outline: 'none',
-              fontFamily: 'inherit',
-            }}
+            style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: '14px', resize: 'none', maxHeight: '100px', direction: 'rtl', padding: '10px 0', lineHeight: 1.5, outline: 'none', fontFamily: 'inherit' }}
           />
         </div>
-
-        <button
-          onClick={send}
-          disabled={!input.trim()}
-          style={{
-            width: '44px', height: '44px',
-            borderRadius: '50%',
-            background: input.trim()
-              ? `linear-gradient(135deg, ${room.color}, ${room.color}cc)`
-              : 'rgba(255,255,255,0.05)',
-            border: 'none', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: input.trim() ? 'pointer' : 'not-allowed',
-            flexShrink: 0,
-            boxShadow: input.trim() ? `0 8px 20px ${room.color}66` : 'none',
-            transition: 'all 0.3s',
-          }}
-        >
+        <button onClick={send} disabled={!input.trim()} style={{ width: '44px', height: '44px', borderRadius: '50%', background: input.trim() ? `linear-gradient(135deg, ${room.color}, ${room.color}cc)` : 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'not-allowed', flexShrink: 0, transition: 'all 0.3s' }}>
           <Send size={18} />
         </button>
       </div>
 
-      {/* Members panel */}
+      {/* Members */}
       {showMembers && (
-        <div style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(0,0,0,0.8)',
-          backdropFilter: 'blur(10px)',
-          zIndex: 9999,
-          display: 'flex', alignItems: 'flex-end',
-        }} onClick={() => setShowMembers(false)}>
-          <div onClick={e => e.stopPropagation()} style={{
-            width: '100%', maxHeight: '70vh',
-            background: 'linear-gradient(180deg, #111827, #000)',
-            borderTopLeftRadius: '24px',
-            borderTopRightRadius: '24px',
-            padding: '20px',
-            overflowY: 'auto',
-            animation: 'slideUp 0.3s ease-out',
-          }}>
-            <div style={{
-              width: '40px', height: '4px',
-              borderRadius: '2px',
-              background: 'rgba(255,255,255,0.2)',
-              margin: '0 auto 20px',
-            }} />
-            <h3 style={{ fontSize: '18px', fontWeight: 800, textAlign: 'center', marginBottom: '4px' }}>
-              الأعضاء ({room.memberCount})
-            </h3>
-            <p style={{ fontSize: '11px', color: '#9CA3AF', textAlign: 'center', marginBottom: '20px' }}>
-              {room.members?.filter((m: any) => m.online).length || 0} متصل الآن
-            </p>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', zIndex: 9999, display: 'flex', alignItems: 'flex-end' }} onClick={() => setShowMembers(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxHeight: '70vh', background: 'linear-gradient(180deg, #111827, #000)', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', padding: '20px', overflowY: 'auto' }}>
+            <div style={{ width: '40px', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.2)', margin: '0 auto 20px' }} />
+            <h3 style={{ fontSize: '18px', fontWeight: 800, textAlign: 'center', marginBottom: '4px' }}>الأعضاء ({room.memberCount})</h3>
+            <p style={{ fontSize: '11px', color: '#9CA3AF', textAlign: 'center', marginBottom: '20px' }}>{room.members?.filter((m: any) => m.online).length || 0} متصل الآن</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {room.members?.map((member: any) => (
-                <div key={member.id} style={{
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                  padding: '10px 12px',
-                  background: 'rgba(255,255,255,0.03)',
-                  borderRadius: '12px',
-                  border: '1px solid rgba(255,255,255,0.05)',
-                }}>
+                <div key={member.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
                   <div style={{ position: 'relative' }}>
-                    <div style={{
-                      width: '40px', height: '40px',
-                      borderRadius: '50%',
-                      background: `linear-gradient(135deg, ${member.color}, ${member.color}aa)`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '16px', fontWeight: 900,
-                    }}>{member.avatar}</div>
-                    {member.online && (
-                      <div style={{
-                        position: 'absolute', bottom: 0, right: 0,
-                        width: '12px', height: '12px',
-                        borderRadius: '50%',
-                        background: '#10B981',
-                        border: '2px solid #000',
-                      }} />
-                    )}
+                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: `linear-gradient(135deg, ${member.color}, ${member.color}aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 900 }}>{member.avatar}</div>
+                    {member.online && <div style={{ position: 'absolute', bottom: 0, right: 0, width: '12px', height: '12px', borderRadius: '50%', background: '#10B981', border: '2px solid #000' }} />}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '14px', fontWeight: 700 }}>
@@ -496,12 +271,8 @@ export default function RoomPage() {
                       {member.isOwner && <span style={{ fontSize: '10px', color: '#FBBF24', marginInlineStart: '6px' }}>👑</span>}
                       {member.isBot && <span style={{ fontSize: '10px', color: '#67E8F9', marginInlineStart: '6px' }}>🤖</span>}
                     </div>
-                    {member.bio && (
-                      <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{member.bio}</div>
-                    )}
-                    <div style={{ fontSize: '10px', color: member.online ? '#10B981' : '#6B7280', marginTop: '2px' }}>
-                      {member.online ? '🟢 متصل' : '⚪ غير متصل'}
-                    </div>
+                    {member.bio && <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{member.bio}</div>}
+                    <div style={{ fontSize: '10px', color: member.online ? '#10B981' : '#6B7280', marginTop: '2px' }}>{member.online ? '🟢 متصل' : '⚪ غير متصل'}</div>
                   </div>
                 </div>
               ))}
@@ -511,17 +282,8 @@ export default function RoomPage() {
       )}
 
       <style>{`
-        @keyframes slideUp {
-          from { transform: translateY(100%); }
-          to { transform: translateY(0); }
-        }
-        .msg-bubble {
-          animation: msgIn 0.3s ease-out;
-        }
-        @keyframes msgIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+        .msg-bubble { animation: msgIn 0.3s ease-out; }
+        @keyframes msgIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
   );
