@@ -178,7 +178,7 @@ async function getAIResponse(
     contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -385,9 +385,9 @@ app.get('/api/ai/test', async (_req, res) => {
   }
 
   try {
-    console.log('🔬 Testing Gemini API: gemini-1.5-flash');
+    console.log('🔬 Testing Gemini API: gemini-2.5-flash');
     const geminiResp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -423,7 +423,7 @@ app.get('/api/ai/test', async (_req, res) => {
       } else if (geminiResp.status === 429) {
         result.diagnosis = '❌ تجاوزت الحد اليومي المجاني. انتظر للغد أو فعّل الفوترة.';
       } else if (geminiResp.status === 404) {
-        result.diagnosis = '❌ النموذج gemini-1.5-flash غير متاح. قد يكون اسمه تغيّر.';
+        result.diagnosis = '❌ النموذج gemini-2.5-flash غير متاح. قد يكون اسمه تغيّر.';
       } else {
         result.diagnosis = `❌ خطأ: ${errMsg}`;
       }
@@ -674,7 +674,7 @@ app.post('/api/ai/chat', auth, async (req: any, res: Response) => {
     }));
 
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
