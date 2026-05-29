@@ -739,12 +739,7 @@ async function botReplyAI(botIdx: number, conversationId: string, userMessage: s
     const personality = BOT_PERSONALITIES[botIdx];
     if (!bot || !personality) return;
 
-    // Build conversation context
     const msgList = isRoom ? roomMessages.get(conversationId) || [] : messages.get(conversationId) || [];
-    const recentContext = msgList.slice(-6).map(m => ({
-      role: (m.senderId === bot.id ? 'assistant' : 'user') as 'assistant' | 'user',
-      content: m.content,
-    }));
 
     // typing indicator
     const emitTo = isRoom ? 'room:' + conversationId : 'chat:' + conversationId;
@@ -758,7 +753,27 @@ async function botReplyAI(botIdx: number, conversationId: string, userMessage: s
     // Get AI response (with extra safety)
     let replyText: string | null = null;
     try {
-      replyText = await getAIResponse(personality.system, userMessage, recentContext);
+      if (isRoom) {
+        // ⭐ في الغرف: نُجمّع السياق كنص واحد (لتجنّب رفض Gemini لتتابع أدوار user)
+        const room = rooms.get(conversationId);
+        const contextText = msgList.slice(-5)
+          .map(m => `${m.senderName}: ${m.content}`)
+          .join('\n');
+        const roomPrompt = `أنت تشارك في غرفة دردشة جماعية إسلامية${room ? ` بعنوان "${room.name}"` : ''}.
+هذه آخر الرسائل في الغرفة:
+
+${contextText}
+
+ردّ بشخصيتك على آخر رسالة بإيجاز شديد (جملة أو جملتين فقط)، كأنك عضو حقيقي في النقاش. لا تكرر اسمك في البداية.`;
+        replyText = await getAIResponse(personality.system, roomPrompt, []);
+      } else {
+        // DM: سياق متناوب طبيعي
+        const recentContext = msgList.slice(-6).map(m => ({
+          role: (m.senderId === bot.id ? 'assistant' : 'user') as 'assistant' | 'user',
+          content: m.content,
+        }));
+        replyText = await getAIResponse(personality.system, userMessage, recentContext);
+      }
     } catch (aiErr) {
       console.error('getAIResponse error:', aiErr);
       replyText = null;
@@ -894,8 +909,8 @@ io.on('connection', (socket) => {
     io.to('room:' + roomId).emit('room:message', msg);
     if (callback) callback({ success: true, message: msg });
 
-    // ⭐ 70% احتمال يردّ بوت بـ AI ⭐
-    if (Math.random() < 0.7) {
+    // ⭐ يردّ بوت بـ AI (100% للتأكد - يمكن خفضها لاحقاً) ⭐
+    if (Math.random() < 1.0) {
       // اختر بوت من أعضاء الغرفة
       const botMembers = Array.from(room.members).filter(id => id.startsWith('bot_'));
       if (botMembers.length === 0) return;
