@@ -2,7 +2,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
-import { Send, ArrowRight, Users, Video, X } from 'lucide-react';
+import { Send, ArrowRight, Users, Video, X, Mic, Phone } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 const BACKEND = API.replace('/api', '');
@@ -25,6 +25,8 @@ export default function RoomPage() {
   const [input, setInput] = useState('');
   const [showMembers, setShowMembers] = useState(false);
   const [showCall, setShowCall] = useState(false);
+  const [callMode, setCallMode] = useState<'join' | 'live'>('join');
+  const [callType, setCallType] = useState<'video' | 'audio'>('video');
   const [typingNames, setTypingNames] = useState<string[]>([]);
   const socketRef = useRef<Socket | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -150,16 +152,116 @@ export default function RoomPage() {
   }
 
   if (showCall) {
-    const jitsiUrl = `https://meet.jit.si/noor-ai-${roomId}#userInfo.displayName="${encodeURIComponent(me.name)}"&config.prejoinPageEnabled=false`;
+    // شاشة الانضمام الأنيقة
+    if (callMode === 'join') {
+      return (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: `linear-gradient(160deg, ${room.color}, #000)`,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', padding: '24px',
+        }}>
+          <div style={{ position: 'absolute', top: '-10%', right: '-15%', width: '60%', height: '40%', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', filter: 'blur(80px)' }} />
+
+          <button onClick={() => setShowCall(false)} style={{
+            position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 16px)', right: '16px',
+            width: '44px', height: '44px', borderRadius: '50%',
+            background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)',
+            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          }}>
+            <X size={22} />
+          </button>
+
+          <div style={{
+            width: '110px', height: '110px', borderRadius: '32px',
+            background: `linear-gradient(135deg, ${room.color}, ${room.color}aa)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '54px', marginBottom: '24px',
+            boxShadow: `0 20px 60px ${room.color}88`,
+            animation: 'callPulse 2s infinite',
+          }}>{room.icon}</div>
+
+          <h2 style={{ fontSize: '24px', fontWeight: 900, color: '#fff', marginBottom: '6px', textAlign: 'center' }}>
+            {room.name}
+          </h2>
+          <p style={{ fontSize: '14px', color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
+            مكالمة جماعية
+          </p>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '6px 14px', borderRadius: '999px',
+            background: 'rgba(0,0,0,0.25)', marginBottom: '40px',
+          }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
+            <span style={{ fontSize: '12px', color: '#fff', fontWeight: 600 }}>
+              {room.members?.filter((m: any) => m.online).length || 0} متصل في الغرفة
+            </span>
+          </div>
+
+          {/* اختيار النوع */}
+          <div style={{ display: 'flex', gap: '14px', marginBottom: '32px', width: '100%', maxWidth: '320px' }}>
+            <button onClick={() => setCallType('video')} style={{
+              flex: 1, padding: '20px', borderRadius: '20px',
+              background: callType === 'video' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.25)',
+              border: callType === 'video' ? '2px solid #fff' : '2px solid transparent',
+              color: '#fff', cursor: 'pointer',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+            }}>
+              <Video size={28} />
+              <span style={{ fontSize: '13px', fontWeight: 700 }}>بالفيديو</span>
+            </button>
+            <button onClick={() => setCallType('audio')} style={{
+              flex: 1, padding: '20px', borderRadius: '20px',
+              background: callType === 'audio' ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.25)',
+              border: callType === 'audio' ? '2px solid #fff' : '2px solid transparent',
+              color: '#fff', cursor: 'pointer',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+            }}>
+              <Mic size={28} />
+              <span style={{ fontSize: '13px', fontWeight: 700 }}>صوت فقط</span>
+            </button>
+          </div>
+
+          {/* زر الانضمام */}
+          <button onClick={() => {
+            // أعلِم الغرفة ببدء المكالمة
+            socketRef.current?.emit('room:send', {
+              roomId,
+              message: { id: 'call_' + Date.now(), type: 'text', content: `📹 بدأتُ مكالمة جماعية ${callType === 'video' ? 'بالفيديو' : 'صوتية'} — انضموا إلينا!` },
+              sender: { id: me.id, name: me.name, avatar: me.avatar, color: me.color },
+            });
+            setCallMode('live');
+          }} style={{
+            width: '100%', maxWidth: '320px', padding: '18px', borderRadius: '18px',
+            background: '#10B981', border: 'none', color: '#fff',
+            fontSize: '17px', fontWeight: 800, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+            boxShadow: '0 12px 32px rgba(16,185,129,0.5)',
+          }}>
+            <Video size={22} /> انضمّ الآن
+          </button>
+
+          <style>{`@keyframes callPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.05); } }`}</style>
+        </div>
+      );
+    }
+
+    // المكالمة الجارية (Jitsi)
+    const config = callType === 'audio'
+      ? '&config.startWithVideoMuted=true'
+      : '';
+    const jitsiUrl = `https://meet.jit.si/noor-ai-${roomId}#userInfo.displayName="${encodeURIComponent(me.name)}"&config.prejoinPageEnabled=false${config}`;
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px', background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-          <button onClick={() => setShowCall(false)} style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EF4444', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <button onClick={() => { setShowCall(false); setCallMode('join'); }} style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EF4444', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <X size={20} />
           </button>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>📹 مكالمة جماعية: {room.name}</div>
-            <div style={{ fontSize: '11px', color: '#9CA3AF' }}>مدعومة بـ Jitsi Meet</div>
+            <div style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>
+              {callType === 'video' ? '📹' : '🎙️'} {room.name}
+            </div>
+            <div style={{ fontSize: '11px', color: '#10B981' }}>● مكالمة جارية</div>
           </div>
         </div>
         <iframe src={jitsiUrl} style={{ flex: 1, width: '100%', border: 'none' }} allow="camera; microphone; fullscreen; display-capture; autoplay" />
@@ -181,7 +283,7 @@ export default function RoomPage() {
           <h2 style={{ fontSize: '15px', fontWeight: 800 }}>{room.name}</h2>
           <p style={{ fontSize: '11px', color: '#9CA3AF' }}>{room.memberCount} عضو • {room.members?.filter((m: any) => m.online).length || 0} متصل</p>
         </div>
-        <button onClick={() => setShowCall(true)} style={{ padding: '8px 14px', borderRadius: '12px', background: 'linear-gradient(135deg, #10B981, #059669)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>
+        <button onClick={() => { setCallMode('join'); setShowCall(true); }} style={{ padding: '8px 14px', borderRadius: '12px', background: 'linear-gradient(135deg, #10B981, #059669)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>
           <Video size={16} /> مكالمة
         </button>
         <button onClick={() => setShowMembers(true)} style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -191,6 +293,46 @@ export default function RoomPage() {
 
       {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px', position: 'relative', zIndex: 2 }}>
+        {/* بانر مكالمة جارية */}
+        {(() => {
+          const recent = messages.slice(-12);
+          const callMsg = [...recent].reverse().find(m => m.content?.includes('📹 بدأتُ مكالمة') || m.content?.includes('بدأ مكالمة'));
+          if (!callMsg || showCall) return null;
+          // أظهر البانر فقط إذا المكالمة "حديثة" (آخر 12 رسالة)
+          return (
+            <div style={{
+              position: 'sticky', top: 0, zIndex: 20,
+              marginBottom: '12px',
+              padding: '12px 16px', borderRadius: '16px',
+              background: 'linear-gradient(135deg, #10B981, #059669)',
+              display: 'flex', alignItems: 'center', gap: '12px',
+              boxShadow: '0 8px 24px rgba(16,185,129,0.4)',
+              animation: 'callBannerIn 0.4s ease-out',
+            }}>
+              <div style={{
+                width: '40px', height: '40px', borderRadius: '50%',
+                background: 'rgba(255,255,255,0.2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                animation: 'callRing 1.5s infinite',
+              }}>
+                <Video size={20} color="#fff" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '13px', fontWeight: 800, color: '#fff' }}>مكالمة جماعية جارية</div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.85)' }}>اضغط للانضمام الآن</div>
+              </div>
+              <button onClick={() => { setCallMode('join'); setShowCall(true); }} style={{
+                padding: '8px 18px', borderRadius: '999px',
+                background: '#fff', border: 'none', color: '#059669',
+                fontSize: '13px', fontWeight: 800, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '6px',
+              }}>
+                <Phone size={14} /> انضمّ
+              </button>
+            </div>
+          );
+        })()}
+
         <div style={{ textAlign: 'center', padding: '20px', marginBottom: '12px' }}>
           <div style={{ width: '64px', height: '64px', margin: '0 auto 10px', borderRadius: '18px', background: `linear-gradient(135deg, ${room.color}, ${room.color}aa)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px' }}>{room.icon}</div>
           <h3 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '4px' }}>{room.name}</h3>
@@ -284,6 +426,8 @@ export default function RoomPage() {
       <style>{`
         .msg-bubble { animation: msgIn 0.3s ease-out; }
         @keyframes msgIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes callBannerIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes callRing { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
       `}</style>
     </div>
   );
