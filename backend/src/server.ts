@@ -154,44 +154,52 @@ const ROOM_SEED_MESSAGES: Record<string, Array<{ botIdx: number; text: string }>
 };
 
 // ═══════════════════════════════════════════════════════
-// 🧠 دالة الذكاء الاصطناعي - تستخدم Claude API
+// 🧠 دالة الذكاء الاصطناعي - تستخدم Google Gemini API
 // ═══════════════════════════════════════════════════════
 async function getAIResponse(
   systemPrompt: string,
   userMessage: string,
   conversationContext: Array<{ role: string; content: string }> = []
 ): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return null as any; // سنستخدم fallback
   }
 
   try {
-    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-haiku-20241022', // أسرع وأرخص للبوتات
-        max_tokens: 300,
-        system: systemPrompt,
-        messages: [
-          ...conversationContext.slice(-6),
-          { role: 'user', content: userMessage },
-        ],
-      }),
-    });
+    // بناء سياق المحادثة بصيغة Gemini
+    const contents: any[] = [];
+    for (const msg of conversationContext.slice(-6)) {
+      contents.push({
+        role: msg.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: msg.content }],
+      });
+    }
+    contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
-    if (!claudeResponse.ok) {
-      console.error('Claude error:', await claudeResponse.text());
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          generationConfig: {
+            maxOutputTokens: 400,
+            temperature: 0.8,
+          },
+        }),
+      }
+    );
+
+    if (!geminiResponse.ok) {
+      console.error('Gemini error:', await geminiResponse.text());
       return null as any;
     }
 
-    const data: any = await claudeResponse.json();
-    return data.content?.[0]?.text || null;
+    const data: any = await geminiResponse.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || null;
   } catch (err) {
     console.error('AI error:', err);
     return null as any;
@@ -320,12 +328,87 @@ function auth(req: any, res: Response, next: any) {
 app.get('/health', (_req, res) => res.json({
   status: 'ok', users: users.size, online: onlineUsers.size,
   rooms: rooms.size, version: 'AI-POWERED-BOTS',
-  hasAIKey: !!process.env.ANTHROPIC_API_KEY,
+  hasAIKey: !!process.env.GEMINI_API_KEY,
 }));
 
 app.get('/', (_req, res) => res.json({ message: '🌙 Noor AI - Intelligent Backend', bots: FAKE_USERS.length, rooms: rooms.size }));
 
 app.get('/api/daily', (_req, res) => res.json({ success: true, ...getTodayContent() }));
+
+// ═══════════════════════════════════════════════════════
+// 🔬 AI TEST endpoint - لتشخيص مشاكل Gemini API
+// ═══════════════════════════════════════════════════════
+app.get('/api/ai/test', async (_req, res) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const result: any = {
+    provider: 'Google Gemini',
+    hasKey: !!apiKey,
+    keyPrefix: apiKey ? apiKey.slice(0, 8) + '...' : 'MISSING',
+    keyLength: apiKey ? apiKey.length : 0,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (!apiKey) {
+    result.error = 'GEMINI_API_KEY غير موجود في Environment Variables';
+    result.diagnosis = '❌ أضف GEMINI_API_KEY في Railway Variables';
+    return res.json(result);
+  }
+
+  try {
+    console.log('🔬 Testing Gemini API: gemini-2.0-flash');
+    const geminiResp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: 'قل: السلام عليكم' }] }],
+          generationConfig: { maxOutputTokens: 50 },
+        }),
+      }
+    );
+
+    result.httpStatus = geminiResp.status;
+    result.httpOk = geminiResp.ok;
+
+    const responseText = await geminiResp.text();
+    try {
+      result.body = JSON.parse(responseText);
+    } catch {
+      result.bodyRaw = responseText.slice(0, 500);
+    }
+
+    if (geminiResp.ok && result.body?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      result.success = true;
+      result.aiReply = result.body.candidates[0].content.parts[0].text;
+      result.diagnosis = '✅ Gemini API يعمل بشكل صحيح! البوتات الآن ذكية.';
+    } else {
+      result.success = false;
+      const errMsg = result.body?.error?.message || responseText;
+
+      if (geminiResp.status === 400 && errMsg?.includes?.('API key not valid')) {
+        result.diagnosis = '❌ المفتاح غير صالح. احصل على مفتاح جديد من aistudio.google.com/app/apikey';
+      } else if (geminiResp.status === 403) {
+        result.diagnosis = '❌ المفتاح ممنوع أو غير مفعّل. تأكّد من تفعيل Generative Language API.';
+      } else if (geminiResp.status === 429) {
+        result.diagnosis = '❌ تجاوزت الحد اليومي المجاني. انتظر للغد أو فعّل الفوترة.';
+      } else if (geminiResp.status === 404) {
+        result.diagnosis = '❌ النموذج gemini-2.0-flash غير متاح. قد يكون اسمه تغيّر.';
+      } else {
+        result.diagnosis = `❌ خطأ: ${errMsg}`;
+      }
+    }
+
+    console.log('🔬 Test result:', JSON.stringify(result, null, 2));
+    res.json(result);
+  } catch (err: any) {
+    result.success = false;
+    result.error = err.message || String(err);
+    result.diagnosis = '❌ فشل الاتصال بـ Gemini API. تحقّق من الإنترنت أو DNS.';
+    console.error('🔬 Test error:', err);
+    res.json(result);
+  }
+});
 
 // ─── Auth ───
 app.post('/api/auth/register', async (req: Request, res: Response): Promise<any> => {
@@ -477,7 +560,7 @@ app.post('/api/rooms', auth, async (req: any, res: Response): Promise<any> => {
 
     let welcomeText = `أهلاً وسهلاً بك ${user.name} في غرفة "${room.name}" 🌙\nنسأل الله أن ينفعنا بهذه الغرفة 💚`;
 
-    if (personality && process.env.ANTHROPIC_API_KEY) {
+    if (personality && process.env.GEMINI_API_KEY) {
       const aiText = await getAIResponse(
         personality.system,
         `أرحّب بـ ${user.name} الذي أنشأ غرفة جديدة بعنوان "${room.name}" وموضوعها "${room.description || 'عام'}". اكتب رسالة ترحيب قصيرة (2-3 جمل) بشخصيتك.`,
@@ -532,10 +615,10 @@ app.post('/api/ai/chat', auth, async (req: any, res: Response) => {
       return res.status(400).json({ success: false, error: 'الرسائل مطلوبة' });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       // Fallback streaming
-      const reply = 'بسم الله الرحمن الرحيم.\n\n⚠️ AI API لم يُعدّ بعد. لتفعيل الإجابات الذكية:\n\n1. سجّل في console.anthropic.com\n2. احصل على API key\n3. أضفه في Railway Variables: ANTHROPIC_API_KEY\n4. أعد نشر Backend\n\nبعدها سأستطيع الإجابة على أي سؤال إسلامي بدقة عالية مثل ChatGPT تماماً.';
+      const reply = 'بسم الله الرحمن الرحيم.\n\n⚠️ AI API لم يُعدّ بعد. لتفعيل الإجابات الذكية:\n\n1. اذهب إلى aistudio.google.com/app/apikey\n2. احصل على مفتاح Gemini (مجاني)\n3. أضفه في Railway Variables: GEMINI_API_KEY\n4. أعد نشر Backend\n\nبعدها سأجيب على أي سؤال إسلامي بدقة عالية مثل ChatGPT تماماً.';
 
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
@@ -554,26 +637,34 @@ app.post('/api/ai/chat', auth, async (req: any, res: Response) => {
       return;
     }
 
-    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 1500,
-        system: SYSTEM_PROMPT,
-        messages: clientMessages.map((m: any) => ({ role: m.role, content: m.content })),
-        stream: true,
-      }),
-    });
+    // بناء سياق المحادثة بصيغة Gemini
+    const contents: any[] = clientMessages.map((m: any) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
 
-    if (!claudeResponse.ok) {
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents,
+          generationConfig: { maxOutputTokens: 1500, temperature: 0.8 },
+        }),
+      }
+    );
+
+    if (!geminiResponse.ok) {
+      console.error('Gemini chat error:', await geminiResponse.text());
       return res.status(500).json({ success: false, error: 'AI service error' });
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
 
-    const reader = claudeResponse.body?.getReader();
+    const reader = geminiResponse.body?.getReader();
     const decoder = new TextDecoder();
 
     if (reader) {
@@ -586,8 +677,9 @@ app.post('/api/ai/chat', auth, async (req: any, res: Response) => {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.type === 'content_block_delta' && data.delta?.text) {
-                res.write(`data: ${JSON.stringify({ text: data.delta.text })}\n\n`);
+              const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) {
+                res.write(`data: ${JSON.stringify({ text })}\n\n`);
               }
             } catch {}
           }
@@ -849,6 +941,6 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('═══════════════════════════════════════');
   console.log('🌙 Noor AI INTELLIGENT on port', PORT);
   console.log('🤖 8 AI-powered bots with personalities');
-  console.log('🧠 AI Key:', process.env.ANTHROPIC_API_KEY ? '✅ SET' : '❌ NOT SET');
+  console.log('🧠 Gemini Key:', process.env.GEMINI_API_KEY ? '✅ SET' : '❌ NOT SET');
   console.log('═══════════════════════════════════════');
 });
