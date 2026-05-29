@@ -782,12 +782,18 @@ app.post('/api/feed/generate', auth, async (req: any, res: Response): Promise<an
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 200, temperature: 1.0 },
+          generationConfig: {
+            maxOutputTokens: 800,
+            temperature: 1.0,
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         }),
       }
     );
     const data: any = await r.json();
-    const generated = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    // اجمع كل الأجزاء (Gemini قد يقسّم النص لعدة parts)
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    const generated = parts.map((p: any) => p.text || '').join('').trim();
 
     if (generated) {
       const cats = ['خاطرة', 'آية', 'حديث', 'نصيحة', 'حكمة'];
