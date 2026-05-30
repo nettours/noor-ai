@@ -6,11 +6,13 @@ import {
   BookOpen, Bot, Clock, Compass, Heart, Users, Sparkles,
   MessageCircle, Star, ChevronLeft, LogOut, Volume2, Pause
 } from 'lucide-react';
+import { useI18n } from '@/components/ui/I18nProvider';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 
 export default function HomePage() {
   const router = useRouter();
+  const { t, lang } = useI18n();
   const [me, setMe] = useState<any>(null);
   const [time, setTime] = useState('');
   const [greeting, setGreeting] = useState('');
@@ -27,17 +29,19 @@ export default function HomePage() {
     } catch { router.push('/auth/login'); }
 
     const update = () => {
+      const locale = lang === 'ar' ? 'ar-SA' : lang === 'fr' ? 'fr-FR' : 'en-US';
       try {
-        setTime(new Date().toLocaleDateString('ar-SA', { weekday: 'long', day: 'numeric', month: 'long', calendar: 'islamic-umalqura' } as any));
-      } catch { setTime(new Date().toLocaleDateString('ar')); }
+        setTime(new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long', calendar: 'islamic-umalqura' } as any));
+      } catch { setTime(new Date().toLocaleDateString(locale)); }
       const h = new Date().getHours();
-      setGreeting(h < 5 ? 'وقت السحَر' : h < 12 ? 'صباح الخير' : h < 17 ? 'طاب يومك' : h < 20 ? 'مساء الخير' : 'مساء النور');
+      const key = h < 5 ? 'home.greeting.dawn' : h < 12 ? 'home.greeting.morning' : h < 17 ? 'home.greeting.afternoon' : h < 20 ? 'home.greeting.evening' : 'home.greeting.night';
+      setGreeting(t(key));
     };
     update();
-    const t = setInterval(update, 60000);
+    const timer = setInterval(update, 60000);
     fetch(API + '/daily').then(r => r.json()).then(d => { if (d.success) setDaily(d); }).catch(() => {});
-    return () => { clearInterval(t); window.speechSynthesis?.cancel(); };
-  }, []);
+    return () => { clearInterval(timer); window.speechSynthesis?.cancel(); };
+  }, [lang]);
 
   const speak = (text: string) => {
     const synth = window.speechSynthesis;
@@ -70,12 +74,12 @@ export default function HomePage() {
 
   // الميزات الأساسية (6 فقط للوضوح) + الباقي في "المزيد"
   const primary = [
-    { href: '/ai', icon: Bot, title: 'مساعد AI', color: '#67E8F9' },
-    { href: '/quran', icon: BookOpen, title: 'القرآن', color: '#10B981' },
-    { href: '/prayer', icon: Clock, title: 'الصلاة', color: '#F87171' },
-    { href: '/adhkar', icon: Heart, title: 'الأذكار', color: '#34D399' },
-    { href: '/stories', icon: Star, title: 'قصص الأنبياء', color: '#FB923C' },
-    { href: '/qibla', icon: Compass, title: 'القبلة', color: '#FBBF24' },
+    { href: '/ai', icon: Bot, title: t('home.feature.ai'), color: '#67E8F9' },
+    { href: '/quran', icon: BookOpen, title: t('home.feature.quran'), color: '#10B981' },
+    { href: '/prayer', icon: Clock, title: t('home.feature.prayer'), color: '#F87171' },
+    { href: '/adhkar', icon: Heart, title: t('home.feature.adhkar'), color: '#34D399' },
+    { href: '/stories', icon: Star, title: t('home.feature.stories'), color: '#FB923C' },
+    { href: '/qibla', icon: Compass, title: t('home.feature.qibla'), color: '#FBBF24' },
   ];
 
   const dailyData = daily?.[tab];
@@ -114,9 +118,9 @@ export default function HomePage() {
           {/* تبويبات */}
           <div style={{ display: 'flex', padding: '6px', gap: '4px', background: 'rgba(255,255,255,0.02)' }}>
             {[
-              { k: 'verse', label: '📖 آية' },
-              { k: 'hadith', label: '📜 حديث' },
-              { k: 'wisdom', label: '💡 حكمة' },
+              { k: 'verse', label: '📖 ' + t('home.tab.verse') },
+              { k: 'hadith', label: '📜 ' + t('home.tab.hadith') },
+              { k: 'wisdom', label: '💡 ' + t('home.tab.wisdom') },
             ].map(t => (
               <button key={t.k} onClick={() => { setTab(t.k as any); window.speechSynthesis?.cancel(); setSpeaking(false); }} style={{
                 flex: 1, padding: '10px', borderRadius: '14px', border: 'none', cursor: 'pointer',
@@ -163,7 +167,7 @@ export default function HomePage() {
         {/* ═══ الميزات الأساسية ═══ */}
         <div style={{ marginBottom: '28px' }}>
           <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#9CA3AF', marginBottom: '16px', paddingRight: '4px' }}>
-            الأساسيات
+            {t('home.section.basics')}
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
             {primary.map((f, i) => (
@@ -189,7 +193,7 @@ export default function HomePage() {
         {/* ═══ المجتمع (بطاقتان كبيرتان) ═══ */}
         <div style={{ marginBottom: '16px' }}>
           <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#9CA3AF', marginBottom: '16px', paddingRight: '4px' }}>
-            المجتمع
+            {t('home.section.community')}
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <Link href="/community" className="wide-tile" style={{
@@ -202,8 +206,8 @@ export default function HomePage() {
                 <Users size={26} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '16px', fontWeight: 800, marginBottom: '2px' }}>غرف الدردشة</div>
-                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>نقاشات + مكالمات جماعية 📹</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, marginBottom: '2px' }}>{t('home.rooms.title')}</div>
+                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>{t('home.rooms.desc')} 📹</div>
               </div>
               <ChevronLeft size={20} color="#6B7280" />
             </Link>
@@ -218,8 +222,8 @@ export default function HomePage() {
                 <Sparkles size={26} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '16px', fontWeight: 800, marginBottom: '2px' }}>تأمّلات نور</div>
-                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>محتوى يلمس القلب يومياً 🔥</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, marginBottom: '2px' }}>{t('home.feed.title')}</div>
+                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>{t('home.feed.desc')} 🔥</div>
               </div>
               <ChevronLeft size={20} color="#6B7280" />
             </Link>
@@ -233,8 +237,8 @@ export default function HomePage() {
                 <MessageCircle size={26} />
               </div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '16px', fontWeight: 800, marginBottom: '2px' }}>الدردشة الخاصة</div>
-                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>رسائل مع المؤمنين</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, marginBottom: '2px' }}>{t('home.chat.title')}</div>
+                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>{t('home.chat.desc')}</div>
               </div>
               <ChevronLeft size={20} color="#6B7280" />
             </Link>
