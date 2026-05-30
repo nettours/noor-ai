@@ -40,55 +40,6 @@ const rooms = new Map<string, ChatRoom>();
 const onlineUsers = new Map<string, string>();
 const activeCalls = new Map<string, any>();
 
-// ═══ FEED POSTS (منشورات المستخدمين) ═══
-interface FeedPost {
-  id: string;
-  authorId: string;
-  authorName: string;
-  authorAvatar: string;
-  authorColor: string;
-  kind: 'text' | 'image' | 'video';
-  text: string;            // النص أو الخاطرة
-  mediaUrl?: string;       // رابط الصورة/الفيديو (Cloudinary)
-  category: string;        // آية، حديث، دعاء، خاطرة...
-  gradient: [string, string];
-  likes: Set<string>;      // معرّفات من أعجبهم
-  createdAt: string;
-}
-const feedPosts = new Map<string, FeedPost>();
-
-const FEED_GRADIENTS: [string, string][] = [
-  ['#0f766e', '#042f2e'], ['#b45309', '#451a03'], ['#6d28d9', '#2e1065'],
-  ['#be185d', '#500724'], ['#0369a1', '#082f49'], ['#15803d', '#052e16'],
-  ['#9333ea', '#3b0764'], ['#c2410c', '#431407'], ['#0e7490', '#083344'],
-];
-
-// منشورات أولية (seed) ليبدو الـ Feed نشطاً
-function seedFeedPosts() {
-  const seeds = [
-    { botIdx: 0, kind: 'text', text: 'وَمَن يَتَّقِ اللَّهَ يَجْعَل لَّهُ مَخْرَجًا ۝ وَيَرْزُقْهُ مِنْ حَيْثُ لَا يَحْتَسِبُ', category: 'آية' },
-    { botIdx: 4, kind: 'text', text: 'مَن قال سُبحانَ اللهِ وبِحَمدِه مئةَ مرّةٍ، حُطَّت خطاياه وإن كانت مثلَ زَبَدِ البحر', category: 'حديث' },
-    { botIdx: 1, kind: 'text', text: 'اللهم اجعل القرآن ربيعَ قلبي، ونورَ صدري، وجلاءَ حُزني', category: 'دعاء' },
-    { botIdx: 6, kind: 'text', text: 'لا تحزن على ما فات، فكل ما كُتب لك سيأتيك ولو بعد حين. ثق بالله.', category: 'خاطرة' },
-    { botIdx: 2, kind: 'text', text: 'إِنَّ مَعَ الْعُسْرِ يُسْرًا', category: 'آية' },
-    { botIdx: 7, kind: 'text', text: 'الكلمةُ الطيّبةُ صدقة — ابتسامتك في وجه أخيك صدقة', category: 'حديث' },
-  ];
-  seeds.forEach((s, i) => {
-    const bot = users.get('bot_' + s.botIdx);
-    if (!bot) return;
-    const id = 'post_seed_' + i;
-    feedPosts.set(id, {
-      id, authorId: bot.id, authorName: bot.name,
-      authorAvatar: bot.avatar, authorColor: bot.color,
-      kind: s.kind as any, text: s.text, category: s.category,
-      gradient: FEED_GRADIENTS[i % FEED_GRADIENTS.length],
-      likes: new Set(),
-      createdAt: new Date(Date.now() - (seeds.length - i) * 3600000).toISOString(),
-    });
-  });
-  console.log('🔥 Seeded', seeds.length, 'feed posts');
-}
-
 const JWT_SECRET = process.env.JWT_SECRET || 'noor-secret-2025';
 const COLORS = ['#10B981','#F59E0B','#3B82F6','#EC4899','#A855F7','#FB923C','#06B6D4','#EF4444'];
 
@@ -321,7 +272,6 @@ function seedFakeMessages() {
 seedFakeUsers();
 seedFakeRooms();
 seedFakeMessages();
-seedFeedPosts();
 console.log('🤖', FAKE_USERS.length, 'AI-powered bots ready');
 console.log('🏠', FAKE_ROOMS.length, 'rooms with messages');
 
@@ -546,6 +496,23 @@ app.post('/api/auth/login', async (req: Request, res: Response): Promise<any> =>
   } catch { res.status(500).json({ success: false }); }
 });
 
+// دخول كضيف (بدون تسجيل - يدخل فوراً)
+app.post('/api/auth/guest', (req: Request, res: Response): any => {
+  try {
+    const guestNum = Math.floor(1000 + Math.random() * 9000);
+    const name = (req.body?.name?.trim()) || `ضيف ${guestNum}`;
+    const id = 'u_guest_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const user: User = {
+      id, name, email: id + '@guest.noor', passwordHash: '',
+      avatar: name[0], color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      createdAt: new Date().toISOString(), lastSeen: new Date().toISOString(),
+    };
+    users.set(id, user);
+    const token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ success: true, data: { token, user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, color: user.color } }});
+  } catch { res.status(500).json({ success: false }); }
+});
+
 app.get('/api/users', auth, (req: any, res: Response) => {
   const list = Array.from(users.values())
     .filter(u => u.id !== req.userId)
@@ -670,173 +637,6 @@ app.post('/api/rooms', auth, async (req: any, res: Response): Promise<any> => {
 
 app.get('/api/rooms/:id/messages', auth, (req: any, res: Response): any => {
   res.json({ success: true, messages: roomMessages.get(req.params.id) || [] });
-});
-
-// ═══════════════════════════════════════════════════════
-// 🔥 FEED (منصة المحتوى - مثل TikTok)
-// ═══════════════════════════════════════════════════════
-
-// جلب كل المنشورات (الأحدث أولاً)
-app.get('/api/feed', auth, (req: any, res: Response) => {
-  const posts = Array.from(feedPosts.values())
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .map(p => ({
-      id: p.id,
-      authorId: p.authorId,
-      authorName: p.authorName,
-      authorAvatar: p.authorAvatar,
-      authorColor: p.authorColor,
-      kind: p.kind,
-      text: p.text,
-      mediaUrl: p.mediaUrl,
-      category: p.category,
-      gradient: p.gradient,
-      likeCount: p.likes.size,
-      likedByMe: p.likes.has(req.userId),
-      isMine: p.authorId === req.userId,
-      createdAt: p.createdAt,
-    }));
-  res.json({ success: true, posts });
-});
-
-// إنشاء منشور جديد
-app.post('/api/feed', auth, (req: any, res: Response): any => {
-  try {
-    const { kind, text, mediaUrl, category } = req.body;
-    const user = users.get(req.userId);
-    if (!user) {
-      console.error('🔥 feed POST: no user for', req.userId);
-      return res.status(401).json({ success: false, error: 'المستخدم غير موجود - أعد تسجيل الدخول' });
-    }
-
-    const k = kind || 'text';
-    // تحقّق مرن
-    if (k === 'text' && (!text || !text.trim())) {
-      return res.status(400).json({ success: false, error: 'اكتب نصاً أولاً' });
-    }
-    if ((k === 'image' || k === 'video') && !mediaUrl) {
-      return res.status(400).json({ success: false, error: 'لم يتم رفع الوسائط (رابط فارغ)' });
-    }
-
-    const id = 'post_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    const post: FeedPost = {
-      id,
-      authorId: user.id,
-      authorName: user.name,
-      authorAvatar: user.avatar,
-      authorColor: user.color,
-      kind: k,
-      text: (text || '').trim(),
-      mediaUrl: mediaUrl || undefined,
-      category: category || 'خاطرة',
-      gradient: FEED_GRADIENTS[Math.floor(Math.random() * FEED_GRADIENTS.length)],
-      likes: new Set(),
-      createdAt: new Date().toISOString(),
-    };
-    feedPosts.set(id, post);
-    console.log('🔥 New feed post by', user.name, '-', k, '- media:', mediaUrl ? 'yes' : 'no');
-    res.json({ success: true, post: { id } });
-  } catch (err: any) {
-    console.error('🔥 feed POST error:', err);
-    res.status(500).json({ success: false, error: 'خطأ في الخادم: ' + (err.message || '') });
-  }
-});
-
-// 🤖 توليد محتوى إسلامي مؤثّر بـ Gemini
-app.post('/api/feed/generate', auth, async (req: any, res: Response): Promise<any> => {
-  const user = users.get(req.userId);
-  if (!user) return res.status(401).json({ success: false });
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  const topic = req.body?.topic || '';
-
-  // محتوى احتياطي مؤثّر (إذا لا AI)
-  const FALLBACK_POSTS = [
-    { text: 'إذا ضاقت بك الدنيا، تذكّر أن الذي خلق الضيق خلق الفرج. ﴿إِنَّ مَعَ الْعُسْرِ يُسْرًا﴾', category: 'خاطرة' },
-    { text: 'لا تجعل قلبك معلّقاً بمن يرحل، بل بمن لا يموت ولا ينام. تعلّق بالله وحده.', category: 'نصيحة' },
-    { text: 'كل سجدة تقرّبك من الله خطوة، وكل دمعة خشية تمحو ذنباً. لا تستهن بصلاتك.', category: 'خاطرة' },
-    { text: 'الشاب الذي ينشأ في عبادة الله، يظلّه الله في يوم لا ظلّ إلا ظله. اغتنم شبابك.', category: 'نصيحة' },
-    { text: '﴿وَمَن يَتَوَكَّلْ عَلَى اللَّهِ فَهُوَ حَسْبُهُ﴾ — من جعل الله وكيله، كفاه كل شيء.', category: 'آية' },
-  ];
-
-  try {
-    if (!apiKey) {
-      const f = FALLBACK_POSTS[Math.floor(Math.random() * FALLBACK_POSTS.length)];
-      return res.json({ success: true, generated: f });
-    }
-
-    const prompt = `اكتب منشوراً إسلامياً قصيراً مؤثّراً جداً يلمس قلوب الشباب${topic ? ` عن: ${topic}` : ''}.
-الشروط:
-- جملة أو جملتين فقط (لا يتجاوز 30 كلمة)
-- مؤثّر، عميق، يحرّك المشاعر
-- يمكن أن يحتوي آية أو حديثاً قصيراً
-- بالعربية الفصحى الجميلة
-- بدون مقدمات، فقط المنشور مباشرة
-
-أعطني فقط المنشور بدون أي شرح أو علامات اقتباس.`;
-
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: {
-            maxOutputTokens: 800,
-            temperature: 1.0,
-            thinkingConfig: { thinkingBudget: 0 },
-          },
-        }),
-      }
-    );
-    const data: any = await r.json();
-    // اجمع كل الأجزاء (Gemini قد يقسّم النص لعدة parts)
-    const parts = data.candidates?.[0]?.content?.parts || [];
-    const generated = parts.map((p: any) => p.text || '').join('').trim();
-
-    if (generated) {
-      const cats = ['خاطرة', 'آية', 'حديث', 'نصيحة', 'حكمة'];
-      res.json({ success: true, generated: { text: generated, category: topic ? 'خاطرة' : cats[Math.floor(Math.random() * cats.length)] } });
-    } else {
-      const f = FALLBACK_POSTS[Math.floor(Math.random() * FALLBACK_POSTS.length)];
-      res.json({ success: true, generated: f });
-    }
-  } catch (err) {
-    const f = FALLBACK_POSTS[Math.floor(Math.random() * FALLBACK_POSTS.length)];
-    res.json({ success: true, generated: f });
-  }
-});
-
-// إعجاب / إلغاء إعجاب
-app.post('/api/feed/:id/like', auth, (req: any, res: Response): any => {
-  const post = feedPosts.get(req.params.id);
-  if (!post) return res.status(404).json({ success: false });
-  if (post.likes.has(req.userId)) {
-    post.likes.delete(req.userId);
-  } else {
-    post.likes.add(req.userId);
-  }
-  res.json({ success: true, likeCount: post.likes.size, likedByMe: post.likes.has(req.userId) });
-});
-
-// حذف منشور (صاحبه فقط)
-app.delete('/api/feed/:id', auth, (req: any, res: Response): any => {
-  const post = feedPosts.get(req.params.id);
-  if (!post) return res.status(404).json({ success: false });
-  if (post.authorId !== req.userId) return res.status(403).json({ success: false, error: 'لا تملك صلاحية' });
-  feedPosts.delete(req.params.id);
-  res.json({ success: true });
-});
-
-// رفع وسائط عبر Cloudinary (يعيد توقيع/إعدادات للرفع المباشر)
-app.get('/api/feed/upload-config', auth, (_req: any, res: Response) => {
-  res.json({
-    success: true,
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
-    uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET || '',
-    configured: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_UPLOAD_PRESET),
-  });
 });
 
 // ═══════════════════════════════════════════════════════
