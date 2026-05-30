@@ -80,6 +80,7 @@ export default function HomePage() {
     { href: '/adhkar', icon: Heart, title: t('home.feature.adhkar'), color: '#34D399' },
     { href: '/stories', icon: Star, title: t('home.feature.stories'), color: '#FB923C' },
     { href: '/qibla', icon: Compass, title: t('home.feature.qibla'), color: '#FBBF24' },
+    { href: '/tajweed', icon: BookOpen, title: 'تعلّم التجويد', color: '#34D399' },
   ];
 
   const dailyData = daily?.[tab];
