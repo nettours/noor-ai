@@ -52,6 +52,7 @@ const DICT: Record<string, Record<Lang, string>> = {
   'home.feature.adhkar': { ar: 'الأذكار', fr: 'Dhikr', en: 'Adhkar' },
   'home.feature.stories': { ar: 'قصص الأنبياء', fr: 'Les Prophètes', en: 'Prophet Stories' },
   'home.feature.qibla': { ar: 'القبلة', fr: 'Qibla', en: 'Qibla' },
+  'home.feature.tajweed': { ar: 'تعلّم التجويد', fr: 'Apprendre le Tajwid', en: 'Learn Tajweed' },
   'home.rooms.title': { ar: 'غرف الدردشة', fr: 'Salons de discussion', en: 'Chat Rooms' },
   'home.rooms.desc': { ar: 'نقاشات + مكالمات جماعية', fr: 'Discussions + appels de groupe', en: 'Discussions + group calls' },
   'home.feed.title': { ar: 'تأمّلات نور', fr: 'Méditations Noor', en: 'Noor Reflections' },
