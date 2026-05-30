@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   BookOpen, Bot, Clock, Compass, Heart, Users, Sparkles,
-  MessageCircle, Star, ChevronLeft, LogOut, Volume2, Pause
+  MessageCircle, Star, ChevronLeft, LogOut, Volume2, Pause, GraduationCap
 } from 'lucide-react';
 import { useI18n } from '@/components/ui/I18nProvider';
 
@@ -72,25 +72,23 @@ export default function HomePage() {
     );
   }
 
-  // الميزات الأساسية (6 فقط للوضوح) + الباقي في "المزيد"
+  // 8 ميزات = صفّان متوازنان (3+3+2) - مرتّبة منطقياً
   const primary = [
     { href: '/ai', icon: Bot, title: t('home.feature.ai'), color: '#67E8F9' },
     { href: '/quran', icon: BookOpen, title: t('home.feature.quran'), color: '#10B981' },
+    { href: '/tajweed', icon: GraduationCap, title: t('home.feature.tajweed'), color: '#34D399' },
+    { href: '/adhkar', icon: Heart, title: t('home.feature.adhkar'), color: '#F472B6' },
     { href: '/prayer', icon: Clock, title: t('home.feature.prayer'), color: '#F87171' },
-    { href: '/adhkar', icon: Heart, title: t('home.feature.adhkar'), color: '#34D399' },
     { href: '/stories', icon: Star, title: t('home.feature.stories'), color: '#FB923C' },
     { href: '/qibla', icon: Compass, title: t('home.feature.qibla'), color: '#FBBF24' },
-    { href: '/tajweed', icon: BookOpen, title: 'تعلّم التجويد', color: '#34D399' },
   ];
 
-  const dailyData = daily?.[tab];
   const dailyText = tab === 'verse' ? daily?.verse?.text : tab === 'hadith' ? daily?.hadith?.text : daily?.wisdom?.text;
 
   return (
     <div style={{ minHeight: '100dvh', background: '#030712', color: '#fff' }}>
       <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 20px 110px', maxWidth: '680px', margin: '0 auto' }}>
 
-        {/* ═══ Header ═══ */}
         <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
           <div>
             <div style={{ fontSize: '13px', color: '#6B7280', marginBottom: '2px' }}>{greeting} 🌙</div>
@@ -105,38 +103,32 @@ export default function HomePage() {
           </button>
         </header>
 
-        {/* ═══ التاريخ ═══ */}
         <div style={{ fontSize: '13px', color: '#9CA3AF', textAlign: 'center', marginBottom: '20px', fontWeight: 500 }}>
           🕌 {time}
         </div>
 
-        {/* ═══ بطاقة اليوم الموحّدة (تبويبات) ═══ */}
         <div style={{
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: '24px', overflow: 'hidden', marginBottom: '36px',
         }}>
-          {/* تبويبات */}
           <div style={{ display: 'flex', padding: '6px', gap: '4px', background: 'rgba(255,255,255,0.02)' }}>
             {[
               { k: 'verse', label: '📖 ' + t('home.tab.verse') },
               { k: 'hadith', label: '📜 ' + t('home.tab.hadith') },
               { k: 'wisdom', label: '💡 ' + t('home.tab.wisdom') },
-            ].map(t => (
-              <button key={t.k} onClick={() => { setTab(t.k as any); window.speechSynthesis?.cancel(); setSpeaking(false); }} style={{
+            ].map(tb => (
+              <button key={tb.k} onClick={() => { setTab(tb.k as any); window.speechSynthesis?.cancel(); setSpeaking(false); }} style={{
                 flex: 1, padding: '10px', borderRadius: '14px', border: 'none', cursor: 'pointer',
-                background: tab === t.k ? 'rgba(16,185,129,0.15)' : 'transparent',
-                color: tab === t.k ? '#10B981' : '#9CA3AF',
+                background: tab === tb.k ? 'rgba(16,185,129,0.15)' : 'transparent',
+                color: tab === tb.k ? '#10B981' : '#9CA3AF',
                 fontSize: '13px', fontWeight: 700, transition: 'all 0.2s',
-              }}>{t.label}</button>
+              }}>{tb.label}</button>
             ))}
           </div>
 
-          {/* المحتوى */}
           <div style={{ padding: '28px 24px' }}>
             <p style={{
-              fontFamily: 'Amiri, serif',
-              fontSize: tab === 'hadith' ? '18px' : '22px',
+              fontFamily: 'Amiri, serif', fontSize: tab === 'hadith' ? '18px' : '22px',
               lineHeight: 1.9, textAlign: 'center', color: '#fff',
               fontWeight: tab === 'hadith' ? 600 : 700, fontStyle: tab === 'hadith' ? 'italic' : 'normal',
               marginBottom: '16px', minHeight: '60px',
@@ -144,7 +136,6 @@ export default function HomePage() {
               {dailyText || '...'}
             </p>
 
-            {/* المصدر + زر الصوت */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
               <span style={{ fontSize: '12px', color: '#6B7280' }}>
                 {tab === 'verse' && daily?.verse && `سورة ${daily.verse.surah} • ${daily.verse.ayah}`}
@@ -165,7 +156,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ═══ الميزات الأساسية ═══ */}
         <div style={{ marginBottom: '28px' }}>
           <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#9CA3AF', marginBottom: '16px', paddingRight: '4px' }}>
             {t('home.section.basics')}
@@ -191,7 +181,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* ═══ المجتمع (بطاقتان كبيرتان) ═══ */}
         <div style={{ marginBottom: '16px' }}>
           <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#9CA3AF', marginBottom: '16px', paddingRight: '4px' }}>
             {t('home.section.community')}
