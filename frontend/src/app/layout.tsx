@@ -1,4 +1,3 @@
-import { WelcomeTour } from '@/components/ui/WelcomeTour';
 import { AuthGuard } from '@/components/ui/AuthGuard';
 import type { Metadata, Viewport } from 'next';
 import { Providers } from '@/components/layout/Providers';
@@ -6,6 +5,8 @@ import { BottomNav } from '@/components/ui/BottomNav';
 import { ParticlesBg } from '@/components/ui/ParticlesBg';
 import { AudioBar } from '@/components/audio/AudioBar';
 import { Toaster } from '@/components/ui/Toast';
+import { I18nProvider } from '@/components/ui/I18nProvider';
+import { WelcomeTour } from '@/components/ui/WelcomeTour';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
@@ -28,15 +29,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="app-bg" />
         <ParticlesBg />
         <Providers>
-         <WelcomeTour />
-         <AuthGuard>
-  <main style={{ position: 'relative', zIndex: 2, minHeight: '100dvh' }}>
-    {children}
-  </main>
-</AuthGuard>
-          <AudioBar />
-          <BottomNav />
-          <Toaster />
+          <I18nProvider>
+            <WelcomeTour />
+            <AuthGuard>
+              <main style={{ position: 'relative', zIndex: 2, minHeight: '100dvh' }}>
+                {children}
+              </main>
+            </AuthGuard>
+            <AudioBar />
+            <BottomNav />
+            <Toaster />
+          </I18nProvider>
         </Providers>
       </body>
     </html>
