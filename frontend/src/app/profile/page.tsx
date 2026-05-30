@@ -1,362 +1,205 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Edit2, MapPin, Key, Download, Share2, LogOut, Bell,
-  ChevronLeft, Star, Flame, Trophy, Moon, Globe, Heart,
-  MessageCircle, Sun, Volume2, VolumeX
+  ArrowRight, Globe, Bell, Volume2, User, Info,
+  LogOut, Check, ChevronLeft, Moon, Shield, Heart
 } from 'lucide-react';
-import { toast } from '@/components/ui/Toast';
+import { useI18n, Lang } from '@/components/ui/I18nProvider';
 
-export default function ProfilePage() {
+const LANGS: { code: Lang; label: string; flag: string }[] = [
+  { code: 'ar', label: 'العربية', flag: '🇸🇦' },
+  { code: 'fr', label: 'Français', flag: '🇫🇷' },
+  { code: 'en', label: 'English', flag: '🇬🇧' },
+];
+
+export default function SettingsPage() {
   const router = useRouter();
-  const [user, setUser] = useState({ name: 'أخي الكريم', email: '', points: 0, streak: 0, level: 'مبتدئ', longest: 0 });
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [lang, setLang] = useState<'ar' | 'en' | 'fr'>('ar');
-  const [notifEnabled, setNotifEnabled] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const { lang, setLang, t } = useI18n();
+  const [me, setMe] = useState<any>(null);
+  const [prayerNotify, setPrayerNotify] = useState(false);
+  const [adhanSound, setAdhanSound] = useState(true);
 
   useEffect(() => {
     try {
+      const token = localStorage.getItem('noor_token');
       const u = JSON.parse(localStorage.getItem('noor_user') || '{}');
-      setUser(prev => ({ ...prev, ...u }));
-      setTheme((localStorage.getItem('noor_theme') as any) || 'dark');
-      setLang((localStorage.getItem('noor_lang') as any) || 'ar');
-      setNotifEnabled(localStorage.getItem('noor_notif') === '1');
-      setSoundEnabled(localStorage.getItem('noor_sound') !== '0');
-    } catch {}
+      if (!token || !u.id) { router.push('/auth/login'); return; }
+      setMe(u);
+      setPrayerNotify(localStorage.getItem('noor_prayer_notify') === '1');
+      setAdhanSound(localStorage.getItem('noor_adhan_sound') !== '0');
+    } catch { router.push('/auth/login'); }
   }, []);
 
-  // ─── ACTIONS ──────────────────────────────────────────
-  const editName = () => {
-    const n = prompt('ما اسمك الكريم؟', user.name);
-    if (n && n.trim()) {
-      const updated = { ...user, name: n.trim() };
-      setUser(updated);
-      localStorage.setItem('noor_user', JSON.stringify(updated));
-      toast('✅ تم تحديث الاسم');
+  const togglePrayer = async () => {
+    if (!prayerNotify && 'Notification' in window) {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') return;
     }
+    const v = !prayerNotify;
+    setPrayerNotify(v);
+    localStorage.setItem('noor_prayer_notify', v ? '1' : '0');
   };
 
-  const toggleTheme = () => {
-    const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
-    localStorage.setItem('noor_theme', next);
-    toast(next === 'dark' ? '🌙 الوضع الليلي' : '☀️ الوضع النهاري — قريباً!');
-  };
-
-  const changeLanguage = () => {
-    const langs = ['ar', 'en', 'fr'];
-    const next = langs[(langs.indexOf(lang) + 1) % langs.length] as 'ar' | 'en' | 'fr';
-    setLang(next);
-    localStorage.setItem('noor_lang', next);
-    const names = { ar: 'العربية', en: 'English', fr: 'Français' };
-    toast('🌍 ' + names[next] + ' — قريباً!');
-  };
-
-  const toggleNotifications = async () => {
-    if (!('Notification' in window)) {
-      toast('متصفحك لا يدعم الإشعارات', 'error');
-      return;
-    }
-    if (Notification.permission === 'denied') {
-      toast('الإشعارات محظورة — فعّلها من إعدادات المتصفح', 'error');
-      return;
-    }
-    if (Notification.permission === 'default') {
-      const p = await Notification.requestPermission();
-      if (p === 'granted') {
-        setNotifEnabled(true);
-        localStorage.setItem('noor_notif', '1');
-        toast('🔔 تم تفعيل الإشعارات');
-        new Notification('نور AI 🌙', { body: 'سنذكرك بأوقات الصلاة والأذكار' });
-      }
-      return;
-    }
-    const next = !notifEnabled;
-    setNotifEnabled(next);
-    localStorage.setItem('noor_notif', next ? '1' : '0');
-    toast(next ? '🔔 الإشعارات مفعّلة' : '🔕 الإشعارات معطّلة');
-  };
-
-  const toggleSound = () => {
-    const next = !soundEnabled;
-    setSoundEnabled(next);
-    localStorage.setItem('noor_sound', next ? '1' : '0');
-    toast(next ? '🔊 الصوت مفعّل' : '🔇 الصوت معطّل');
-  };
-
-  const updateLocation = () => {
-    if (!navigator.geolocation) {
-      toast('متصفحك لا يدعم تحديد الموقع', 'error');
-      return;
-    }
-    toast('📍 جاري تحديد موقعك...');
-    navigator.geolocation.getCurrentPosition(
-      p => {
-        localStorage.setItem('noor_location', JSON.stringify({
-          lat: p.coords.latitude,
-          lng: p.coords.longitude,
-          city: 'موقعك الحالي',
-        }));
-        toast('✅ تم تحديث الموقع');
-      },
-      () => toast('تعذّر تحديد الموقع', 'error')
-    );
-  };
-
-  const installApp = () => {
-    // PWA install prompt
-    if ((window as any).deferredPrompt) {
-      (window as any).deferredPrompt.prompt();
-      toast('📲 ثبّت التطبيق');
-    } else {
-      toast('💡 في Chrome: ⋮ → "إضافة للشاشة الرئيسية"', 'info');
-    }
-  };
-
-  const shareApp = () => {
-    const text = 'نور AI 🌙\nتطبيق إسلامي شامل: قرآن، صلاة، أذكار، AI ومجتمع';
-    if (navigator.share) {
-      navigator.share({ title: 'نور AI', text, url: window.location.origin });
-    } else {
-      navigator.clipboard?.writeText(text + '\n' + window.location.origin);
-      toast('📋 تم نسخ الرابط');
-    }
+  const toggleAdhan = () => {
+    const v = !adhanSound;
+    setAdhanSound(v);
+    localStorage.setItem('noor_adhan_sound', v ? '1' : '0');
   };
 
   const logout = () => {
-    if (!confirm('هل تريد تسجيل الخروج؟')) return;
     localStorage.removeItem('noor_token');
     localStorage.removeItem('noor_user');
-    router.push('/auth/login');
+    router.push('/');
   };
 
-  const goToAI = () => {
-    router.push('/ai');
-  };
-
-  // ─── LEVELS ──────────────────────────────────────────
-  const levels = [
-    { min: 0, name: 'مبتدئ', icon: '🌱' },
-    { min: 500, name: 'ملتزم', icon: '🌿' },
-    { min: 1500, name: 'متقدم', icon: '🌳' },
-    { min: 3500, name: 'قريب من الله', icon: '⭐' },
-    { min: 7000, name: 'قدوة', icon: '🌟' },
-  ];
-  const currentLv = levels.filter(l => user.points >= l.min).pop() || levels[0];
-  const nextLv = levels.find(l => l.min > user.points);
-  const lvProgress = nextLv ? ((user.points - currentLv.min) / (nextLv.min - currentLv.min)) * 100 : 100;
+  if (!me) {
+    return (
+      <div style={{ minHeight: '100dvh', background: '#030712', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 40, height: 40, border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#10B981', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
-    <div className="pt-safe pb-nav">
-      <div className="container-app">
+    <div style={{ minHeight: '100dvh', background: '#030712', color: '#fff' }}>
+      <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 20px) 20px 110px', maxWidth: '680px', margin: '0 auto' }}>
 
-        {/* Hero */}
-        <div className="animate-fade-down" style={{
-          background: 'linear-gradient(180deg, rgba(16,185,129,0.12) 0%, transparent 100%)',
-          padding: '24px 24px 32px',
-          textAlign: 'center',
-        }}>
-          <div style={{
-            width: '100px', height: '100px',
-            margin: '0 auto 14px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--gold-3), var(--gold-5))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '40px', fontWeight: 900,
-            color: 'var(--bg-0)',
-            boxShadow: 'var(--shadow-gold)',
-            position: 'relative',
-            cursor: 'pointer',
-          }} className="animate-glow" onClick={editName}>
-            {user.name[0] || '☪️'}
-            <div style={{
-              position: 'absolute',
-              bottom: 0, right: 0,
-              width: '32px', height: '32px',
-              borderRadius: '50%',
-              background: 'var(--bg-3)',
-              border: '2px solid var(--bg-0)',
-              color: 'var(--gold-5)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Edit2 size={14} />
-            </div>
-          </div>
-          <h1 style={{ fontSize: '22px', fontWeight: 900 }}>{user.name}</h1>
-          {user.email && (
-            <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '4px' }}>
-              {user.email}
-            </p>
-          )}
-          <div className="badge badge-gold" style={{ marginTop: '12px', padding: '6px 18px', fontSize: '13px' }}>
-            {currentLv.icon} {currentLv.name}
-          </div>
-        </div>
-
-        <div style={{ padding: '0 16px' }}>
-          {/* Stats */}
-          <div className="animate-fade-up delay-1" style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '10px',
-            marginBottom: '14px',
+        {/* Header */}
+        <header style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '28px' }}>
+          <button onClick={() => router.push('/home')} style={{
+            width: '44px', height: '44px', borderRadius: '14px',
+            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
           }}>
-            <StatBox icon={<Star size={18} />} value={user.points.toLocaleString('ar')} label="النقاط" color="var(--gold-5)" />
-            <StatBox icon={<Flame size={18} />} value={String(user.streak)} label="ستريك 🔥" color="#FB923C" />
-            <StatBox icon={<Trophy size={18} />} value={String(user.longest)} label="الأطول" color="var(--green-5)" />
-          </div>
+            <ArrowRight size={20} />
+          </button>
+          <h1 style={{ fontSize: '24px', fontWeight: 800 }}>{t('settings.title')}</h1>
+        </header>
 
-          {/* Level */}
-          <div className="glass-card animate-fade-up delay-2" style={{ padding: '16px', marginBottom: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <span style={{ fontSize: '14px', fontWeight: 700 }}>
-                {currentLv.icon} {currentLv.name}
-              </span>
-              {nextLv && (
-                <span style={{ fontSize: '12px', color: 'var(--text-3)' }}>
-                  {user.points} / {nextLv.min}
-                </span>
-              )}
-            </div>
-            <div style={{ height: '8px', background: 'var(--bg-4)', borderRadius: '4px', overflow: 'hidden' }}>
-              <div style={{
-                width: lvProgress + '%',
-                height: '100%',
-                background: 'linear-gradient(90deg, var(--green-4), var(--gold-5))',
-                borderRadius: '4px',
-                transition: 'width 0.6s',
-              }} />
-            </div>
-            {nextLv && (
-              <p style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '8px', textAlign: 'center' }}>
-                {nextLv.min - user.points} نقطة للوصول إلى {nextLv.icon} {nextLv.name}
-              </p>
-            )}
-          </div>
-
-          {/* Account */}
-          <Section title="الحساب">
-            <Row icon={<Edit2 size={18} />} title="تعديل الاسم" sub="غيّر اسمك" onClick={editName} color="var(--green-5)" />
-            <Row icon={<Key size={18} />} title="مفتاح AI" sub="تفعيل المساعد الذكي" onClick={goToAI} color="#67E8F9" />
-            <Row icon={<MapPin size={18} />} title="الموقع" sub="لأوقات صلاة دقيقة" onClick={updateLocation} color="var(--blue-5)" />
-          </Section>
-
-          {/* App */}
-          <Section title="التطبيق">
-            <Row icon={<Bell size={18} />} title="الإشعارات" sub={notifEnabled ? '🟢 مفعّلة' : '⚪ معطّلة'} onClick={toggleNotifications} color="var(--purple-5)" toggle={notifEnabled} />
-            <Row icon={soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />} title="الصوت" sub={soundEnabled ? '🔊 مفعّل' : '🔇 معطّل'} onClick={toggleSound} color="var(--gold-5)" toggle={soundEnabled} />
-            <Row icon={theme === 'dark' ? <Moon size={18} /> : <Sun size={18} />} title="المظهر" sub={theme === 'dark' ? '🌙 ليلي' : '☀️ نهاري'} onClick={toggleTheme} color="#FB923C" />
-            <Row icon={<Globe size={18} />} title="اللغة" sub={lang === 'ar' ? 'العربية' : lang === 'en' ? 'English' : 'Français'} onClick={changeLanguage} color="var(--green-5)" />
-            <Row icon={<Download size={18} />} title="تثبيت التطبيق" sub="على الشاشة الرئيسية" onClick={installApp} color="#A855F7" />
-          </Section>
-
-          {/* Community */}
-          <Section title="المجتمع">
-            <Row icon={<MessageCircle size={18} />} title="الدردشة" sub="مع الإخوة" onClick={() => router.push('/chat')} color="var(--green-5)" />
-            <Row icon={<Heart size={18} />} title="منشوراتي" sub="عرض ما شاركت" onClick={() => router.push('/community')} color="#F87171" />
-            <Row icon={<Share2 size={18} />} title="مشاركة التطبيق" sub="أهدِ لأحبابك" onClick={shareApp} color="var(--blue-5)" />
-          </Section>
-
-          {/* Logout */}
-          <Section title="">
-            <Row icon={<LogOut size={18} />} title="تسجيل الخروج" sub="" onClick={logout} color="#F87171" danger />
-          </Section>
-
-          <p style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-4)', padding: '20px 0', lineHeight: 1.8 }}>
-            نور AI v1.0 • صُنع بحب 💚<br />
-            رفيقك في طريق الإيمان 🌙
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatBox({ icon, value, label, color }: any) {
-  return (
-    <div className="glass-card" style={{ padding: '14px 8px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: -15, right: -15, width: '60px', height: '60px', borderRadius: '50%', background: color, opacity: 0.08 }} />
-      <div style={{ color, marginBottom: '4px', display: 'flex', justifyContent: 'center' }}>{icon}</div>
-      <div style={{ fontSize: '20px', fontWeight: 900, color }}>{value}</div>
-      <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '2px' }}>{label}</div>
-    </div>
-  );
-}
-
-function Section({ title, children }: any) {
-  return (
-    <div className="animate-fade-up" style={{ marginBottom: '16px' }}>
-      {title && (
-        <h3 style={{
-          fontSize: '11px',
-          color: 'var(--text-4)',
-          fontWeight: 700,
-          letterSpacing: '0.5px',
-          padding: '0 8px 6px',
-          textTransform: 'uppercase',
-        }}>
-          {title}
-        </h3>
-      )}
-      <div className="glass-card" style={{ padding: '4px 16px' }}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function Row({ icon, title, sub, onClick, color, danger, toggle }: any) {
-  return (
-    <button onClick={onClick} style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '14px',
-      padding: '13px 0',
-      borderBottom: '1px solid var(--border-1)',
-      width: '100%',
-      textAlign: 'right',
-      cursor: 'pointer',
-      transition: 'background 0.15s',
-    }}>
-      <div style={{
-        width: '38px', height: '38px',
-        borderRadius: '12px',
-        background: color + '22',
-        color,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-      }}>
-        {icon}
-      </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: '14px', fontWeight: 600, color: danger ? '#F87171' : 'var(--text-0)' }}>{title}</div>
-        {sub && <div style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '2px' }}>{sub}</div>}
-      </div>
-      {toggle !== undefined ? (
+        {/* بطاقة المستخدم */}
         <div style={{
-          width: '36px', height: '20px',
-          borderRadius: '12px',
-          background: toggle ? 'var(--green-5)' : 'var(--bg-4)',
-          position: 'relative',
-          transition: 'all 0.2s',
+          display: 'flex', alignItems: 'center', gap: '16px', padding: '20px',
+          borderRadius: '20px', marginBottom: '28px',
+          background: 'linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.04))',
+          border: '1px solid rgba(16,185,129,0.2)',
         }}>
           <div style={{
-            position: 'absolute',
-            top: '2px',
-            [toggle ? 'left' : 'right']: '2px',
-            width: '16px', height: '16px',
-            borderRadius: '50%',
-            background: '#fff',
-            transition: 'all 0.2s',
-          }} />
+            width: '60px', height: '60px', borderRadius: '18px',
+            background: `linear-gradient(135deg, ${me.color || '#10B981'}, ${(me.color || '#10B981')}aa)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', fontWeight: 900,
+          }}>{me.avatar || me.name?.[0]}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '18px', fontWeight: 800 }}>{me.name}</div>
+            <div style={{ fontSize: '12px', color: '#9CA3AF' }}>{me.email || 'عضو في نور AI'}</div>
+          </div>
         </div>
-      ) : (
-        <ChevronLeft size={16} color="var(--text-4)" />
-      )}
+
+        {/* ═══ اللغة ═══ */}
+        <Section icon={<Globe size={18} />} title={t('settings.language')} color="#67E8F9">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {LANGS.map(l => (
+              <button key={l.code} onClick={() => setLang(l.code)} style={{
+                display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
+                borderRadius: '14px', cursor: 'pointer', width: '100%',
+                background: lang === l.code ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.03)',
+                border: lang === l.code ? '1px solid rgba(16,185,129,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                color: '#fff',
+              }}>
+                <span style={{ fontSize: '22px' }}>{l.flag}</span>
+                <span style={{ flex: 1, textAlign: 'start', fontSize: '15px', fontWeight: 600 }}>{l.label}</span>
+                {lang === l.code && <Check size={18} color="#10B981" />}
+              </button>
+            ))}
+          </div>
+        </Section>
+
+        {/* ═══ الإشعارات ═══ */}
+        <Section icon={<Bell size={18} />} title={t('settings.notifications')} color="#FBBF24">
+          <Toggle label={t('settings.prayer_alerts')} value={prayerNotify} onChange={togglePrayer} />
+        </Section>
+
+        {/* ═══ الصوت ═══ */}
+        <Section icon={<Volume2 size={18} />} title={t('settings.sound')} color="#A855F7">
+          <Toggle label={t('settings.adhan')} value={adhanSound} onChange={toggleAdhan} />
+        </Section>
+
+        {/* ═══ روابط ═══ */}
+        <Section icon={<Info size={18} />} title={t('settings.about')} color="#34D399">
+          <LinkRow icon={<Shield size={18} />} label="الخصوصية والأمان" onClick={() => {}} />
+          <LinkRow icon={<Heart size={18} />} label="قيّم التطبيق" onClick={() => {}} />
+          <LinkRow icon={<Info size={18} />} label="نور AI — الإصدار 1.0" onClick={() => {}} />
+        </Section>
+
+        {/* تسجيل الخروج */}
+        <button onClick={logout} style={{
+          width: '100%', padding: '16px', borderRadius: '16px', marginTop: '12px',
+          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+          color: '#FCA5A5', fontSize: '15px', fontWeight: 700, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+        }}>
+          <LogOut size={18} />
+          {t('settings.logout')}
+        </button>
+
+        <p style={{ textAlign: 'center', fontSize: '11px', color: '#4B5563', marginTop: '24px' }}>
+          🌙 صُنع بحب لخدمة المسلمين
+        </p>
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+function Section({ icon, title, color, children }: { icon: ReactNode; title: string; color: string; children: ReactNode }) {
+  return (
+    <div style={{ marginBottom: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', paddingRight: '4px' }}>
+        <div style={{ width: '32px', height: '32px', borderRadius: '10px', background: `${color}1a`, color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {icon}
+        </div>
+        <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#9CA3AF' }}>{title}</h2>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: () => void }) {
+  return (
+    <button onClick={onChange} style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '16px', borderRadius: '14px', width: '100%', cursor: 'pointer',
+      background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', color: '#fff',
+    }}>
+      <span style={{ fontSize: '15px', fontWeight: 600 }}>{label}</span>
+      <div style={{
+        width: '48px', height: '28px', borderRadius: '999px', position: 'relative',
+        background: value ? '#10B981' : 'rgba(255,255,255,0.15)', transition: 'background 0.3s',
+      }}>
+        <div style={{
+          position: 'absolute', top: '3px', width: '22px', height: '22px', borderRadius: '50%',
+          background: '#fff', transition: 'all 0.3s',
+          left: value ? '3px' : '23px',
+        }} />
+      </div>
     </button>
   );
 }
+
+function LinkRow({ icon, label, onClick }: { icon: ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} style={{
+      display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px',
+      borderRadius: '14px', width: '100%', cursor: 'pointer', marginBottom: '8px',
+      background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', color: '#fff',
+    }}>
+      <span style={{ color: '#9CA3AF' }}>{icon}</span>
+      <span style={{ flex: 1, textAlign: 'start', fontSize: '14px', fontWeight: 600 }}>{label}</span>
+      <ChevronLeft size={18} color="#4B5563" />
+    </button>
+  );
+}
+
