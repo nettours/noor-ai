@@ -3,9 +3,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  BookOpen, Bot, Clock, Compass, Heart,
-  Users, Sparkles, MessageCircle, Star, ChevronLeft,
-  LogOut, Volume2, Pause
+  BookOpen, Bot, Clock, Compass, Heart, Users, Sparkles,
+  MessageCircle, Star, ChevronLeft, LogOut, Volume2, Pause
 } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
@@ -16,6 +15,7 @@ export default function HomePage() {
   const [time, setTime] = useState('');
   const [greeting, setGreeting] = useState('');
   const [daily, setDaily] = useState<any>(null);
+  const [tab, setTab] = useState<'verse' | 'hadith' | 'wisdom'>('verse');
   const [speaking, setSpeaking] = useState(false);
 
   useEffect(() => {
@@ -26,41 +26,30 @@ export default function HomePage() {
       setMe(u);
     } catch { router.push('/auth/login'); }
 
-    const updateTime = () => {
+    const update = () => {
       try {
-        setTime(new Date().toLocaleDateString('ar-SA', {
-          weekday: 'long', day: 'numeric', month: 'long', calendar: 'islamic-umalqura'
-        } as any));
+        setTime(new Date().toLocaleDateString('ar-SA', { weekday: 'long', day: 'numeric', month: 'long', calendar: 'islamic-umalqura' } as any));
       } catch { setTime(new Date().toLocaleDateString('ar')); }
-
       const h = new Date().getHours();
-      if (h < 5) setGreeting('وقت السحَر 🌌');
-      else if (h < 12) setGreeting('صباح الخير ☀️');
-      else if (h < 17) setGreeting('طاب يومك 🌤️');
-      else if (h < 20) setGreeting('مساء الخير 🌅');
-      else setGreeting('مساء النور 🌙');
+      setGreeting(h < 5 ? 'وقت السحَر' : h < 12 ? 'صباح الخير' : h < 17 ? 'طاب يومك' : h < 20 ? 'مساء الخير' : 'مساء النور');
     };
-    updateTime();
-    const t = setInterval(updateTime, 60000);
-
+    update();
+    const t = setInterval(update, 60000);
     fetch(API + '/daily').then(r => r.json()).then(d => { if (d.success) setDaily(d); }).catch(() => {});
-
     return () => { clearInterval(t); window.speechSynthesis?.cancel(); };
   }, []);
 
-  const speakVerse = () => {
-    if (!daily?.verse) return;
+  const speak = (text: string) => {
     const synth = window.speechSynthesis;
     if (!synth) return;
     if (speaking) { synth.cancel(); setSpeaking(false); return; }
     synth.cancel();
     setTimeout(() => {
-      const u = new SpeechSynthesisUtterance(daily.verse.text);
+      const u = new SpeechSynthesisUtterance(text);
       u.lang = 'ar-SA'; u.rate = 0.82;
       u.onend = () => setSpeaking(false);
       u.onerror = () => setSpeaking(false);
-      setSpeaking(true);
-      synth.speak(u);
+      setSpeaking(true); synth.speak(u);
     }, 100);
   };
 
@@ -72,268 +61,195 @@ export default function HomePage() {
 
   if (!me) {
     return (
-      <div style={{ minHeight: '100dvh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ minHeight: '100dvh', background: '#030712', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 40, height: 40, border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#10B981', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
-  const features = [
-    { href: '/rooms', icon: Users, title: 'غرف الدردشة', desc: 'موضوعية + مكالمات', color: '#A855F7', badge: 'جديد ⭐' },
-    { href: '/chat', icon: MessageCircle, title: 'الدردشة الخاصة', desc: 'رسائل مع المؤمنين', color: '#EC4899' },
-    { href: '/quran', icon: BookOpen, title: 'القرآن الكريم', desc: '114 سورة بـ 6 قراء', color: '#10B981' },
-    { href: '/ai', icon: Bot, title: 'مساعد AI', desc: 'فقه وتفسير', color: '#67E8F9' },
-    { href: '/prayer', icon: Clock, title: 'أوقات الصلاة', desc: 'دقيقة بحسب موقعك', color: '#F87171' },
-    { href: '/qibla', icon: Compass, title: 'بوصلة القبلة', desc: 'GPS عالي الدقة', color: '#FBBF24' },
-    { href: '/adhkar', icon: Heart, title: 'الأذكار', desc: 'حصن المسلم', color: '#34D399' },
-    { href: '/tasbih', icon: Sparkles, title: 'التسبيح', desc: 'سبحة رقمية', color: '#60A5FA' },
-    { href: '/stories', icon: Star, title: 'قصص الأنبياء', desc: '25 قصة بالصوت 🔊', color: '#FB923C', badge: 'صوت 🎙️' },
-    { href: '/feed', icon: Sparkles, title: 'تأمّلات نور', desc: 'آيات وأذكار يومية', color: '#EC4899', badge: 'جديد 🔥' },
+  // الميزات الأساسية (6 فقط للوضوح) + الباقي في "المزيد"
+  const primary = [
+    { href: '/ai', icon: Bot, title: 'مساعد AI', color: '#67E8F9' },
+    { href: '/quran', icon: BookOpen, title: 'القرآن', color: '#10B981' },
+    { href: '/prayer', icon: Clock, title: 'الصلاة', color: '#F87171' },
+    { href: '/adhkar', icon: Heart, title: 'الأذكار', color: '#34D399' },
+    { href: '/stories', icon: Star, title: 'قصص الأنبياء', color: '#FB923C' },
+    { href: '/qibla', icon: Compass, title: 'القبلة', color: '#FBBF24' },
   ];
 
+  const dailyData = daily?.[tab];
+  const dailyText = tab === 'verse' ? daily?.verse?.text : tab === 'hadith' ? daily?.hadith?.text : daily?.wisdom?.text;
+
   return (
-    <div style={{ minHeight: '100dvh', background: '#000', color: '#fff', position: 'relative', overflow: 'hidden' }}>
-      {/* خلفية حيّة متعدّدة الطبقات */}
-      <div style={{
-        position: 'fixed', inset: 0, zIndex: 0,
-        background: `
-          radial-gradient(ellipse 80% 50% at 50% 0%, rgba(16,185,129,0.18) 0%, transparent 55%),
-          radial-gradient(ellipse 60% 50% at 85% 75%, rgba(168,85,247,0.1) 0%, transparent 50%),
-          radial-gradient(ellipse 50% 40% at 10% 90%, rgba(103,232,249,0.08) 0%, transparent 50%),
-          #000
-        `,
-      }} />
-      {/* كرات ضوء عائمة */}
-      <div style={{ position: 'fixed', top: '8%', right: '-12%', width: '260px', height: '260px', borderRadius: '50%', background: 'rgba(16,185,129,0.12)', filter: 'blur(70px)', animation: 'floatA 10s ease-in-out infinite', zIndex: 0 }} />
-      <div style={{ position: 'fixed', bottom: '15%', left: '-12%', width: '220px', height: '220px', borderRadius: '50%', background: 'rgba(168,85,247,0.1)', filter: 'blur(70px)', animation: 'floatB 12s ease-in-out infinite', zIndex: 0 }} />
+    <div style={{ minHeight: '100dvh', background: '#030712', color: '#fff' }}>
+      <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 20px 110px', maxWidth: '680px', margin: '0 auto' }}>
 
-      <div style={{
-        position: 'relative', zIndex: 2,
-        padding: 'calc(env(safe-area-inset-top, 0px) + 20px) 16px 100px',
-        maxWidth: '1200px', margin: '0 auto',
-      }}>
-        {/* Header */}
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '52px', height: '52px', borderRadius: '16px',
-              background: `linear-gradient(135deg, ${me.color || '#10B981'}, ${(me.color || '#10B981')}aa)`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '20px', fontWeight: 900,
-              boxShadow: `0 8px 24px ${me.color || '#10B981'}55`,
-              border: '2px solid rgba(255,255,255,0.1)',
-            }}>
-              {me.avatar || me.name?.[0] || '?'}
-            </div>
-            <div>
-              <div style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '2px' }}>{greeting}</div>
-              <div style={{ fontSize: '19px', fontWeight: 800 }}>{me.name}</div>
-            </div>
+        {/* ═══ Header ═══ */}
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
+          <div>
+            <div style={{ fontSize: '13px', color: '#6B7280', marginBottom: '2px' }}>{greeting} 🌙</div>
+            <div style={{ fontSize: '24px', fontWeight: 800, letterSpacing: '-0.5px' }}>{me.name}</div>
           </div>
-
           <button onClick={logout} style={{
-            width: '40px', height: '40px', borderRadius: '12px',
-            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-            color: '#9CA3AF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            width: '44px', height: '44px', borderRadius: '14px',
+            background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+            color: '#6B7280', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
           }}>
             <LogOut size={18} />
           </button>
         </header>
 
-        {/* بطاقة الترحيب البطلة (Hero) */}
-        <div style={{
-          padding: '24px 22px',
-          background: 'linear-gradient(135deg, rgba(16,185,129,0.18), rgba(168,85,247,0.08))',
-          border: '1px solid rgba(16,185,129,0.25)',
-          borderRadius: '24px', marginBottom: '16px',
-          position: 'relative', overflow: 'hidden',
-        }}>
-          <div style={{ position: 'absolute', top: '-40px', right: '-40px', width: '160px', height: '160px', borderRadius: '50%', background: '#10B981', opacity: 0.12, filter: 'blur(40px)' }} />
-          <div style={{ fontSize: '40px', marginBottom: '8px', animation: 'gentleFloat 4s ease-in-out infinite', display: 'inline-block' }}>🌙</div>
-          <div style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '4px' }}>🕌 {time}</div>
-          <h1 style={{
-            fontSize: '22px', fontWeight: 900, lineHeight: 1.5,
-            background: 'linear-gradient(135deg, #fff, #A7F3D0)',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          }}>
-            أهلاً بك في نور AI
-          </h1>
-          <p style={{ fontSize: '13px', color: '#9CA3AF', marginTop: '4px' }}>
-            رفيقك الإسلامي الذكي — استكشف، تعلّم، وتقرّب
-          </p>
+        {/* ═══ التاريخ ═══ */}
+        <div style={{ fontSize: '13px', color: '#9CA3AF', textAlign: 'center', marginBottom: '20px', fontWeight: 500 }}>
+          🕌 {time}
         </div>
 
-        {/* آية اليوم - مع زر استماع */}
-        {daily?.verse && (
-          <div style={{
-            padding: '22px 20px',
-            background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.04))',
-            border: '1px solid rgba(16,185,129,0.3)',
-            borderRadius: '20px', marginBottom: '14px',
-            position: 'relative', overflow: 'hidden',
-          }}>
-            <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '150px', height: '150px', borderRadius: '50%', background: '#10B981', opacity: 0.1, filter: 'blur(40px)' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', position: 'relative' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #10B981, #059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>📖</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#10B981' }}>آية اليوم</div>
-                <div style={{ fontSize: '10px', color: '#9CA3AF' }}>تأمّل في كلام الله</div>
-              </div>
-              <button onClick={speakVerse} style={{
-                width: '40px', height: '40px', borderRadius: '12px',
-                background: speaking ? 'rgba(16,185,129,0.25)' : 'rgba(255,255,255,0.06)',
-                border: speaking ? '1px solid #10B981' : '1px solid rgba(255,255,255,0.1)',
-                color: speaking ? '#10B981' : '#9CA3AF',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                animation: speaking ? 'pulse 1.5s infinite' : 'none',
-              }}>
-                {speaking ? <Pause size={18} /> : <Volume2 size={18} />}
-              </button>
-            </div>
-            <p style={{ fontFamily: 'Amiri, serif', fontSize: '22px', lineHeight: 1.8, textAlign: 'center', color: '#fff', marginBottom: '10px', fontWeight: 700 }}>
-              {daily.verse.text}
-            </p>
-            <p style={{ fontSize: '11px', color: '#9CA3AF', textAlign: 'center' }}>
-              📍 سورة {daily.verse.surah} • الآية {daily.verse.ayah}
-            </p>
-          </div>
-        )}
-
-        {/* حديث اليوم */}
-        {daily?.hadith && (
-          <div style={{
-            padding: '20px',
-            background: 'linear-gradient(135deg, rgba(251,191,36,0.12), rgba(251,191,36,0.04))',
-            border: '1px solid rgba(251,191,36,0.3)', borderRadius: '20px', marginBottom: '14px',
-            position: 'relative', overflow: 'hidden',
-          }}>
-            <div style={{ position: 'absolute', top: '-30px', left: '-30px', width: '150px', height: '150px', borderRadius: '50%', background: '#FBBF24', opacity: 0.1, filter: 'blur(40px)' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', position: 'relative' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #FBBF24, #D97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>📜</div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#FBBF24' }}>حديث اليوم</div>
-                <div style={{ fontSize: '10px', color: '#9CA3AF' }}>من السنة النبوية</div>
-              </div>
-            </div>
-            <p style={{ fontSize: '16px', lineHeight: 1.8, color: '#fff', marginBottom: '12px', fontWeight: 600, fontStyle: 'italic' }}>
-              "{daily.hadith.text}"
-            </p>
-            <div style={{ padding: '10px 14px', background: 'rgba(0,0,0,0.3)', borderRadius: '12px', border: '1px solid rgba(251,191,36,0.2)', marginBottom: '10px' }}>
-              <p style={{ fontSize: '12px', color: '#D1D5DB', lineHeight: 1.6 }}>💡 {daily.hadith.explanation}</p>
-            </div>
-            <p style={{ fontSize: '11px', color: '#9CA3AF', textAlign: 'left' }}>📖 رواه {daily.hadith.narrator}</p>
-          </div>
-        )}
-
-        {/* حكمة اليوم */}
-        {daily?.wisdom && (
-          <div style={{
-            padding: '20px',
-            background: 'linear-gradient(135deg, rgba(168,85,247,0.12), rgba(168,85,247,0.04))',
-            border: '1px solid rgba(168,85,247,0.3)', borderRadius: '20px', marginBottom: '20px',
-            position: 'relative', overflow: 'hidden',
-          }}>
-            <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '150px', height: '150px', borderRadius: '50%', background: '#A855F7', opacity: 0.1, filter: 'blur(40px)' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', position: 'relative' }}>
-              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'linear-gradient(135deg, #A855F7, #7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>💡</div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 800, color: '#A855F7' }}>حكمة اليوم</div>
-                <div style={{ fontSize: '10px', color: '#9CA3AF' }}>كلمات نافعة</div>
-              </div>
-            </div>
-            <p style={{ fontFamily: 'Amiri, serif', fontSize: '20px', lineHeight: 1.7, textAlign: 'center', color: '#fff', marginBottom: '10px', fontWeight: 600 }}>
-              ❝ {daily.wisdom.text} ❞
-            </p>
-            <p style={{ fontSize: '12px', color: '#A855F7', textAlign: 'center', fontWeight: 700 }}>— {daily.wisdom.author}</p>
-          </div>
-        )}
-
-        {/* بانر الغرف */}
-        <Link href="/rooms" className="rooms-banner" style={{
-          display: 'block', padding: '22px',
-          background: 'linear-gradient(135deg, #A855F7 0%, #7C3AED 100%)',
-          borderRadius: '20px', marginBottom: '14px', textDecoration: 'none', color: '#fff',
-          boxShadow: '0 16px 40px rgba(168,85,247,0.4)', position: 'relative', overflow: 'hidden',
+        {/* ═══ بطاقة اليوم الموحّدة (تبويبات) ═══ */}
+        <div style={{
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '24px', overflow: 'hidden', marginBottom: '36px',
         }}>
-          <div style={{ position: 'absolute', top: '-30px', right: '-30px', width: '180px', height: '180px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', filter: 'blur(40px)' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', position: 'relative' }}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '14px', background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Users size={26} color="#fff" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 800 }}>غرف الدردشة الجماعية</h3>
-                <span style={{ padding: '3px 8px', background: 'rgba(255,255,255,0.25)', borderRadius: '999px', fontSize: '9px', fontWeight: 700 }}>مكالمات 📹</span>
-              </div>
-              <p style={{ fontSize: '11px', opacity: 0.9 }}>8 غرف موضوعية + مكالمات جماعية بالفيديو</p>
-            </div>
-            <ChevronLeft size={22} color="#fff" />
+          {/* تبويبات */}
+          <div style={{ display: 'flex', padding: '6px', gap: '4px', background: 'rgba(255,255,255,0.02)' }}>
+            {[
+              { k: 'verse', label: '📖 آية' },
+              { k: 'hadith', label: '📜 حديث' },
+              { k: 'wisdom', label: '💡 حكمة' },
+            ].map(t => (
+              <button key={t.k} onClick={() => { setTab(t.k as any); window.speechSynthesis?.cancel(); setSpeaking(false); }} style={{
+                flex: 1, padding: '10px', borderRadius: '14px', border: 'none', cursor: 'pointer',
+                background: tab === t.k ? 'rgba(16,185,129,0.15)' : 'transparent',
+                color: tab === t.k ? '#10B981' : '#9CA3AF',
+                fontSize: '13px', fontWeight: 700, transition: 'all 0.2s',
+              }}>{t.label}</button>
+            ))}
           </div>
-        </Link>
 
-        {/* بانر الـ Feed (جديد - يشدّ الزائر) */}
-        <Link href="/feed" className="rooms-banner" style={{
-          display: 'block', padding: '22px',
-          background: 'linear-gradient(135deg, #EC4899 0%, #BE185D 100%)',
-          borderRadius: '20px', marginBottom: '24px', textDecoration: 'none', color: '#fff',
-          boxShadow: '0 16px 40px rgba(236,72,153,0.4)', position: 'relative', overflow: 'hidden',
-        }}>
-          <div style={{ position: 'absolute', bottom: '-30px', left: '-30px', width: '180px', height: '180px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', filter: 'blur(40px)' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', position: 'relative' }}>
-            <div style={{ width: '56px', height: '56px', borderRadius: '14px', background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Sparkles size={26} color="#fff" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 800 }}>تأمّلات نور</h3>
-                <span style={{ padding: '3px 8px', background: 'rgba(255,255,255,0.25)', borderRadius: '999px', fontSize: '9px', fontWeight: 700 }}>🔥 رائج</span>
-              </div>
-              <p style={{ fontSize: '11px', opacity: 0.9 }}>محتوى يلمس القلب — اسحب، شارك، تأمّل</p>
-            </div>
-            <ChevronLeft size={22} color="#fff" />
-          </div>
-        </Link>
-
-        <h2 style={{ fontSize: '17px', fontWeight: 800, marginBottom: '12px' }}>✨ كل الميزات</h2>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
-          {features.map((f, i) => (
-            <Link key={i} href={f.href} className="feature-tile" style={{
-              padding: '18px 14px',
-              background: 'linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))',
-              backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '16px', textDecoration: 'none', color: '#fff',
-              position: 'relative', overflow: 'hidden', transition: 'all 0.3s',
-              animation: `tileIn 0.5s ease-out ${i * 0.05}s both`,
+          {/* المحتوى */}
+          <div style={{ padding: '28px 24px' }}>
+            <p style={{
+              fontFamily: 'Amiri, serif',
+              fontSize: tab === 'hadith' ? '18px' : '22px',
+              lineHeight: 1.9, textAlign: 'center', color: '#fff',
+              fontWeight: tab === 'hadith' ? 600 : 700, fontStyle: tab === 'hadith' ? 'italic' : 'normal',
+              marginBottom: '16px', minHeight: '60px',
             }}>
-              {f.badge && (
-                <div style={{ position: 'absolute', top: '10px', left: '10px', padding: '3px 7px', background: `${f.color}33`, border: `1px solid ${f.color}66`, borderRadius: '999px', fontSize: '8px', color: f.color, fontWeight: 700 }}>{f.badge}</div>
+              {dailyText || '...'}
+            </p>
+
+            {/* المصدر + زر الصوت */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '12px', color: '#6B7280' }}>
+                {tab === 'verse' && daily?.verse && `سورة ${daily.verse.surah} • ${daily.verse.ayah}`}
+                {tab === 'hadith' && daily?.hadith && `رواه ${daily.hadith.narrator}`}
+                {tab === 'wisdom' && daily?.wisdom && `— ${daily.wisdom.author}`}
+              </span>
+              {dailyText && (
+                <button onClick={() => speak(dailyText)} style={{
+                  width: '34px', height: '34px', borderRadius: '10px',
+                  background: speaking ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.05)',
+                  border: 'none', color: speaking ? '#10B981' : '#9CA3AF',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                }}>
+                  {speaking ? <Pause size={15} /> : <Volume2 size={15} />}
+                </button>
               )}
-              <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: `${f.color}22`, border: `1px solid ${f.color}44`, color: f.color, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px' }}>
-                <f.icon size={20} />
+            </div>
+          </div>
+        </div>
+
+        {/* ═══ الميزات الأساسية ═══ */}
+        <div style={{ marginBottom: '28px' }}>
+          <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#9CA3AF', marginBottom: '16px', paddingRight: '4px' }}>
+            الأساسيات
+          </h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+            {primary.map((f, i) => (
+              <Link key={i} href={f.href} className="tile" style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+                padding: '22px 12px', borderRadius: '20px', textDecoration: 'none', color: '#fff',
+                background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)',
+                transition: 'all 0.25s',
+              }}>
+                <div style={{
+                  width: '48px', height: '48px', borderRadius: '15px',
+                  background: `${f.color}1a`, color: f.color,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <f.icon size={24} />
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: 600, textAlign: 'center' }}>{f.title}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* ═══ المجتمع (بطاقتان كبيرتان) ═══ */}
+        <div style={{ marginBottom: '16px' }}>
+          <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#9CA3AF', marginBottom: '16px', paddingRight: '4px' }}>
+            المجتمع
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <Link href="/community" className="wide-tile" style={{
+              display: 'flex', alignItems: 'center', gap: '16px', padding: '20px',
+              borderRadius: '20px', textDecoration: 'none', color: '#fff',
+              background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(124,58,237,0.08))',
+              border: '1px solid rgba(168,85,247,0.2)', transition: 'all 0.25s',
+            }}>
+              <div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'rgba(168,85,247,0.2)', color: '#A855F7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Users size={26} />
               </div>
-              <h3 style={{ fontSize: '13px', fontWeight: 800, marginBottom: '3px' }}>{f.title}</h3>
-              <p style={{ fontSize: '10px', color: '#9CA3AF', lineHeight: 1.4 }}>{f.desc}</p>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '16px', fontWeight: 800, marginBottom: '2px' }}>غرف الدردشة</div>
+                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>نقاشات + مكالمات جماعية 📹</div>
+              </div>
+              <ChevronLeft size={20} color="#6B7280" />
             </Link>
-          ))}
+
+            <Link href="/feed" className="wide-tile" style={{
+              display: 'flex', alignItems: 'center', gap: '16px', padding: '20px',
+              borderRadius: '20px', textDecoration: 'none', color: '#fff',
+              background: 'linear-gradient(135deg, rgba(236,72,153,0.15), rgba(190,24,93,0.08))',
+              border: '1px solid rgba(236,72,153,0.2)', transition: 'all 0.25s',
+            }}>
+              <div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'rgba(236,72,153,0.2)', color: '#EC4899', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Sparkles size={26} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '16px', fontWeight: 800, marginBottom: '2px' }}>تأمّلات نور</div>
+                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>محتوى يلمس القلب يومياً 🔥</div>
+              </div>
+              <ChevronLeft size={20} color="#6B7280" />
+            </Link>
+
+            <Link href="/chat" className="wide-tile" style={{
+              display: 'flex', alignItems: 'center', gap: '16px', padding: '20px',
+              borderRadius: '20px', textDecoration: 'none', color: '#fff',
+              background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', transition: 'all 0.25s',
+            }}>
+              <div style={{ width: '52px', height: '52px', borderRadius: '16px', background: 'rgba(96,165,250,0.15)', color: '#60A5FA', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <MessageCircle size={26} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '16px', fontWeight: 800, marginBottom: '2px' }}>الدردشة الخاصة</div>
+                <div style={{ fontSize: '12px', color: '#9CA3AF' }}>رسائل مع المؤمنين</div>
+              </div>
+              <ChevronLeft size={20} color="#6B7280" />
+            </Link>
+          </div>
         </div>
       </div>
 
       <style>{`
-        .feature-tile:hover {
-          transform: translateY(-4px);
-          border-color: rgba(255,255,255,0.18) !important;
-          background: linear-gradient(135deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02)) !important;
-          box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+        .tile:active { transform: scale(0.96); background: rgba(255,255,255,0.06) !important; }
+        .wide-tile:active { transform: scale(0.98); }
+        @media (hover: hover) {
+          .tile:hover { background: rgba(255,255,255,0.06) !important; transform: translateY(-2px); }
+          .wide-tile:hover { transform: translateY(-2px); }
         }
-        .rooms-banner:hover { transform: translateY(-3px) scale(1.01); }
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes floatA { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-20px,30px); } }
-        @keyframes floatB { 0%,100% { transform: translate(0,0); } 50% { transform: translate(20px,-30px); } }
-        @keyframes gentleFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-        @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.08); } }
-        @keyframes tileIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>
   );
