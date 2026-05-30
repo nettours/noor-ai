@@ -1,3 +1,4 @@
+import { WelcomeTour } from '@/components/ui/WelcomeTour';
 import { AuthGuard } from '@/components/ui/AuthGuard';
 import type { Metadata, Viewport } from 'next';
 import { Providers } from '@/components/layout/Providers';
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="app-bg" />
         <ParticlesBg />
         <Providers>
+         <WelcomeTour />
          <AuthGuard>
   <main style={{ position: 'relative', zIndex: 2, minHeight: '100dvh' }}>
     {children}
