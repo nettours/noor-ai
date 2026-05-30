@@ -6,6 +6,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { MongoClient } from 'mongodb';
 
 interface User {
   id: string; name: string; email: string;
@@ -56,6 +57,113 @@ interface FeedPost {
   createdAt: string;
 }
 const feedPosts = new Map<string, FeedPost>();
+
+// ═══════════════════════════════════════════════════════
+// 💾 MongoDB PERSISTENCE (حفظ دائم - الذاكرة كاش)
+// ═══════════════════════════════════════════════════════
+let db: any = null;
+let dbReady = false;
+
+async function connectDB() {
+  const uri = process.env.DATABASE_URL || process.env.MONGODB_URI;
+  if (!uri) {
+    console.log('⚠️ لا يوجد DATABASE_URL - التخزين في الذاكرة فقط (مؤقّت)');
+    return;
+  }
+  try {
+    const client = new MongoClient(uri);
+    await client.connect();
+    db = client.db('noor');
+    dbReady = true;
+    console.log('💾 MongoDB متصل ✅');
+  } catch (err) {
+    console.error('🔥 فشل اتصال MongoDB:', err);
+  }
+}
+
+// تحميل كل البيانات من القاعدة للذاكرة (عند الإقلاع)
+async function loadFromDB() {
+  if (!dbReady) return;
+  try {
+    // المستخدمون
+    const dbUsers = await db.collection('users').find({}).toArray();
+    for (const u of dbUsers) {
+      const { _id, ...user } = u;
+      users.set(user.id, user as User);
+      if (user.email) usersByEmail.set(user.email.toLowerCase(), user.id);
+    }
+    // المنشورات (likes مخزّنة كمصفوفة → نحوّلها Set)
+    const dbPosts = await db.collection('feedPosts').find({}).toArray();
+    for (const p of dbPosts) {
+      const { _id, ...post } = p;
+      post.likes = new Set(post.likes || []);
+      feedPosts.set(post.id, post as FeedPost);
+    }
+    // الرسائل الخاصة
+    const dbDM = await db.collection('messages').find({}).toArray();
+    for (const m of dbDM) {
+      messages.set(m.conversationId, m.list || []);
+    }
+    // رسائل الغرف
+    const dbRoom = await db.collection('roomMessages').find({}).toArray();
+    for (const m of dbRoom) {
+      roomMessages.set(m.roomId, m.list || []);
+    }
+    console.log(`💾 حُمّل من القاعدة: ${users.size} مستخدم، ${feedPosts.size} منشور`);
+  } catch (err) {
+    console.error('🔥 فشل تحميل البيانات:', err);
+  }
+}
+
+// حفظ مستخدم واحد (فوري عند التسجيل)
+async function persistUser(user: User) {
+  if (!dbReady) return;
+  try {
+    await db.collection('users').updateOne(
+      { id: user.id }, { $set: user }, { upsert: true }
+    );
+  } catch (err) { console.error('persistUser error:', err); }
+}
+
+// حذف مستخدم
+async function deleteUserDB(id: string) {
+  if (!dbReady) return;
+  try { await db.collection('users').deleteOne({ id }); } catch {}
+}
+
+// حفظ منشور (likes → مصفوفة)
+async function persistPost(post: FeedPost) {
+  if (!dbReady) return;
+  try {
+    const doc = { ...post, likes: Array.from(post.likes) };
+    await db.collection('feedPosts').updateOne(
+      { id: post.id }, { $set: doc }, { upsert: true }
+    );
+  } catch (err) { console.error('persistPost error:', err); }
+}
+
+async function deletePostDB(id: string) {
+  if (!dbReady) return;
+  try { await db.collection('feedPosts').deleteOne({ id }); } catch {}
+}
+
+// حفظ دوري للرسائل (كل 15 ثانية)
+async function persistMessages() {
+  if (!dbReady) return;
+  try {
+    for (const [conversationId, list] of messages.entries()) {
+      await db.collection('messages').updateOne(
+        { conversationId }, { $set: { conversationId, list } }, { upsert: true }
+      );
+    }
+    for (const [roomId, list] of roomMessages.entries()) {
+      await db.collection('roomMessages').updateOne(
+        { roomId }, { $set: { roomId, list } }, { upsert: true }
+      );
+    }
+  } catch (err) { console.error('persistMessages error:', err); }
+}
+
 
 const FEED_GRADIENTS: [string, string][] = [
   ['#0f766e', '#042f2e'], ['#b45309', '#451a03'], ['#6d28d9', '#2e1065'],
@@ -526,6 +634,7 @@ app.post('/api/auth/register', async (req: Request, res: Response): Promise<any>
     };
     users.set(id, user);
     usersByEmail.set(user.email, id);
+    persistUser(user); // 💾 حفظ دائم
     const token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '30d' });
     io.emit('user:new', { id: user.id, name: user.name, avatar: user.avatar, color: user.color, online: false });
 
@@ -577,6 +686,7 @@ app.post('/api/auth/guest', (req: Request, res: Response): any => {
       createdAt: new Date().toISOString(), lastSeen: new Date().toISOString(),
     };
     users.set(id, user);
+    persistUser(user); // 💾 حفظ دائم
     const token = jwt.sign({ userId: id }, JWT_SECRET, { expiresIn: '30d' });
     res.json({ success: true, data: { token, user: { id: user.id, name: user.name, email: user.email, avatar: user.avatar, color: user.color } }});
   } catch { res.status(500).json({ success: false }); }
@@ -770,6 +880,7 @@ app.post('/api/feed', auth, (req: any, res: Response): any => {
       createdAt: new Date().toISOString(),
     };
     feedPosts.set(id, post);
+    persistPost(post); // 💾 حفظ دائم
     console.log('🔥 New feed post by', user.name, '-', k, '- media:', mediaUrl ? 'yes' : 'no');
     res.json({ success: true, post: { id } });
   } catch (err: any) {
@@ -844,6 +955,7 @@ app.post('/api/feed/:id/like', auth, (req: any, res: Response): any => {
   } else {
     post.likes.add(req.userId);
   }
+  persistPost(post); // 💾 حفظ الإعجاب
   res.json({ success: true, likeCount: post.likes.size, likedByMe: post.likes.has(req.userId) });
 });
 
@@ -853,6 +965,7 @@ app.delete('/api/feed/:id', auth, (req: any, res: Response): any => {
   if (!post) return res.status(404).json({ success: false });
   if (post.authorId !== req.userId) return res.status(403).json({ success: false, error: 'لا تملك صلاحية' });
   feedPosts.delete(req.params.id);
+  deletePostDB(req.params.id); // 💾 حذف دائم
   res.json({ success: true });
 });
 
@@ -923,6 +1036,7 @@ app.delete('/api/admin/users/:id', adminAuth, (req: any, res: Response): any => 
   users.delete(req.params.id);
   if (target.email) usersByEmail.delete(target.email.toLowerCase());
   onlineUsers.delete(req.params.id);
+  deleteUserDB(req.params.id); // 💾 حذف دائم
   res.json({ success: true });
 });
 
@@ -942,6 +1056,7 @@ app.get('/api/admin/posts', adminAuth, (_req: any, res: Response) => {
 app.delete('/api/admin/posts/:id', adminAuth, (req: any, res: Response): any => {
   if (!feedPosts.has(req.params.id)) return res.status(404).json({ success: false });
   feedPosts.delete(req.params.id);
+  deletePostDB(req.params.id); // 💾 حذف دائم
   res.json({ success: true });
 });
 
@@ -1362,18 +1477,36 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('📛 SIGTERM received - graceful shutdown');
+  try { await persistMessages(); console.log('💾 حُفظت الرسائل'); } catch {}
   httpServer.close(() => {
     console.log('✅ Server closed');
     process.exit(0);
   });
+  setTimeout(() => process.exit(0), 3000); // ضمان الخروج
 });
 
-httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log('═══════════════════════════════════════');
-  console.log('🌙 Noor AI INTELLIGENT on port', PORT);
-  console.log('🤖 8 AI-powered bots with personalities');
-  console.log('🧠 Gemini Key:', process.env.GEMINI_API_KEY ? '✅ SET' : '❌ NOT SET');
-  console.log('═══════════════════════════════════════');
-});
+async function startServer() {
+  // 1) اتصل بالقاعدة وحمّل البيانات الدائمة
+  await connectDB();
+  await loadFromDB();
+
+  // 2) حفظ دوري للرسائل كل 15 ثانية
+  if (dbReady) {
+    setInterval(() => { persistMessages().catch(() => {}); }, 15000);
+  }
+
+  // 3) ابدأ الخادم
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log('═══════════════════════════════════════');
+    console.log('🌙 Noor AI on port', PORT);
+    console.log('💾 Database:', dbReady ? '✅ MongoDB (دائم)' : '⚠️ ذاكرة فقط');
+    console.log('🧠 Gemini Key:', process.env.GEMINI_API_KEY ? '✅ SET' : '❌ NOT SET');
+    console.log('═══════════════════════════════════════');
+  });
+}
+
+// حفظ عند الإغلاق مُدمج في معالج SIGTERM أعلاه
+
+startServer();
