@@ -375,6 +375,25 @@ function auth(req: any, res: Response, next: any) {
   } catch { res.status(401).json({ success: false }); }
 }
 
+// ═══ حماية الأدمن: يتحقّق أن المستخدم هو ADMIN_EMAIL ═══
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+function adminAuth(req: any, res: Response, next: any) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) { res.status(401).json({ success: false, error: 'غير مصرّح' }); return; }
+  try {
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+    const user = users.get(decoded.userId);
+    if (!user) { res.status(401).json({ success: false, error: 'غير مصرّح' }); return; }
+    if (!ADMIN_EMAIL) { res.status(403).json({ success: false, error: 'لوحة الأدمن غير مُفعّلة (اضبط ADMIN_EMAIL)' }); return; }
+    if (user.email?.toLowerCase() !== ADMIN_EMAIL) {
+      res.status(403).json({ success: false, error: 'هذه اللوحة للمدير فقط' });
+      return;
+    }
+    req.userId = decoded.userId;
+    next();
+  } catch { res.status(401).json({ success: false, error: 'غير مصرّح' }); }
+}
+
 app.get('/health', (_req, res) => res.json({
   status: 'ok', users: users.size, online: onlineUsers.size,
   rooms: rooms.size, version: 'AI-POWERED-BOTS',
@@ -845,6 +864,124 @@ app.get('/api/feed/upload-config', auth, (_req: any, res: Response) => {
     uploadPreset: process.env.CLOUDINARY_UPLOAD_PRESET || '',
     configured: !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_UPLOAD_PRESET),
   });
+});
+
+// ═══════════════════════════════════════════════════════
+// 👑 ADMIN PANEL (محمي بـ ADMIN_EMAIL)
+// ═══════════════════════════════════════════════════════
+
+// هل المستخدم الحالي أدمن؟ (للـ frontend ليعرف هل يعرض الزر)
+app.get('/api/admin/check', auth, (req: any, res: Response) => {
+  const user = users.get(req.userId);
+  const isAdmin = !!ADMIN_EMAIL && user?.email?.toLowerCase() === ADMIN_EMAIL;
+  res.json({ success: true, isAdmin });
+});
+
+// إحصائيات عامة
+app.get('/api/admin/stats', adminAuth, (_req: any, res: Response) => {
+  const realUsers = Array.from(users.values()).filter(u => !u.isBot);
+  const guests = realUsers.filter(u => u.id.startsWith('u_guest_'));
+  const totalRoomMsgs = Array.from(roomMessages.values()).reduce((a, l) => a + l.length, 0);
+  const totalDMs = Array.from(messages.values()).reduce((a, l) => a + l.length, 0);
+  res.json({
+    success: true,
+    stats: {
+      totalUsers: realUsers.length,
+      guests: guests.length,
+      registered: realUsers.length - guests.length,
+      online: onlineUsers.size,
+      bots: FAKE_USERS.length,
+      rooms: rooms.size,
+      feedPosts: feedPosts.size,
+      roomMessages: totalRoomMsgs,
+      directMessages: totalDMs,
+      activeCalls: activeCalls.size,
+    },
+  });
+});
+
+// قائمة المستخدمين
+app.get('/api/admin/users', adminAuth, (_req: any, res: Response) => {
+  const list = Array.from(users.values())
+    .filter(u => !u.isBot)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .map(u => ({
+      id: u.id, name: u.name, email: u.email,
+      avatar: u.avatar, color: u.color,
+      isGuest: u.id.startsWith('u_guest_'),
+      online: onlineUsers.has(u.id),
+      createdAt: u.createdAt, lastSeen: u.lastSeen,
+    }));
+  res.json({ success: true, users: list });
+});
+
+// حذف مستخدم
+app.delete('/api/admin/users/:id', adminAuth, (req: any, res: Response): any => {
+  const target = users.get(req.params.id);
+  if (!target || target.isBot) return res.status(404).json({ success: false });
+  if (target.email?.toLowerCase() === ADMIN_EMAIL) return res.status(400).json({ success: false, error: 'لا يمكن حذف الأدمن' });
+  users.delete(req.params.id);
+  if (target.email) usersByEmail.delete(target.email.toLowerCase());
+  onlineUsers.delete(req.params.id);
+  res.json({ success: true });
+});
+
+// كل المنشورات (مع خيار الحذف)
+app.get('/api/admin/posts', adminAuth, (_req: any, res: Response) => {
+  const list = Array.from(feedPosts.values())
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .map(p => ({
+      id: p.id, authorName: p.authorName, kind: p.kind,
+      text: p.text, mediaUrl: p.mediaUrl, category: p.category,
+      likes: p.likes.size, createdAt: p.createdAt,
+    }));
+  res.json({ success: true, posts: list });
+});
+
+// حذف منشور (أدمن)
+app.delete('/api/admin/posts/:id', adminAuth, (req: any, res: Response): any => {
+  if (!feedPosts.has(req.params.id)) return res.status(404).json({ success: false });
+  feedPosts.delete(req.params.id);
+  res.json({ success: true });
+});
+
+// قائمة الغرف
+app.get('/api/admin/rooms', adminAuth, (_req: any, res: Response) => {
+  const list = Array.from(rooms.values()).map(r => ({
+    id: r.id, name: r.name, icon: r.icon,
+    members: r.members.size,
+    messages: (roomMessages.get(r.id) || []).length,
+  }));
+  res.json({ success: true, rooms: list });
+});
+
+// إرسال إشعار/رسالة جماعية لكل الغرف
+app.post('/api/admin/broadcast', adminAuth, (req: any, res: Response): any => {
+  const { message } = req.body;
+  if (!message?.trim()) return res.status(400).json({ success: false, error: 'الرسالة فارغة' });
+  const admin = users.get(req.userId);
+  let count = 0;
+  rooms.forEach((room, roomId) => {
+    const msg: ChatMessage = {
+      id: 'broadcast_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      conversationId: roomId,
+      senderId: admin?.id || 'admin',
+      senderName: '📢 إدارة نور AI',
+      senderAvatar: '📢',
+      senderColor: '#FBBF24',
+      type: 'text',
+      content: message.trim(),
+      createdAt: new Date().toISOString(),
+      status: 'sent',
+    };
+    const list = roomMessages.get(roomId) || [];
+    list.push(msg);
+    roomMessages.set(roomId, list);
+    try { io.to('room:' + roomId).emit('room:message', msg); } catch {}
+    count++;
+  });
+  console.log('📢 Broadcast sent to', count, 'rooms');
+  res.json({ success: true, sentTo: count });
 });
 
 // ═══════════════════════════════════════════════════════
