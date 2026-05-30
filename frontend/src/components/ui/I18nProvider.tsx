@@ -34,6 +34,30 @@ const DICT: Record<string, Record<Lang, string>> = {
   'common.disabled': { ar: 'مُعطّل', fr: 'Désactivé', en: 'Disabled' },
   'greeting.morning': { ar: 'صباح الخير', fr: 'Bonjour', en: 'Good morning' },
   'greeting.evening': { ar: 'مساء النور', fr: 'Bonsoir', en: 'Good evening' },
+
+  // ═══ الصفحة الرئيسية ═══
+  'home.greeting.dawn': { ar: 'وقت السحَر', fr: "L'aube", en: 'Pre-dawn' },
+  'home.greeting.morning': { ar: 'صباح الخير', fr: 'Bonjour', en: 'Good morning' },
+  'home.greeting.afternoon': { ar: 'طاب يومك', fr: 'Bon après-midi', en: 'Good afternoon' },
+  'home.greeting.evening': { ar: 'مساء الخير', fr: 'Bonsoir', en: 'Good evening' },
+  'home.greeting.night': { ar: 'مساء النور', fr: 'Bonne nuit', en: 'Good evening' },
+  'home.tab.verse': { ar: 'آية', fr: 'Verset', en: 'Verse' },
+  'home.tab.hadith': { ar: 'حديث', fr: 'Hadith', en: 'Hadith' },
+  'home.tab.wisdom': { ar: 'حكمة', fr: 'Sagesse', en: 'Wisdom' },
+  'home.section.basics': { ar: 'الأساسيات', fr: 'Essentiels', en: 'Essentials' },
+  'home.section.community': { ar: 'المجتمع', fr: 'Communauté', en: 'Community' },
+  'home.feature.ai': { ar: 'مساعد AI', fr: 'Assistant IA', en: 'AI Assistant' },
+  'home.feature.quran': { ar: 'القرآن', fr: 'Coran', en: 'Quran' },
+  'home.feature.prayer': { ar: 'الصلاة', fr: 'Prière', en: 'Prayer' },
+  'home.feature.adhkar': { ar: 'الأذكار', fr: 'Dhikr', en: 'Adhkar' },
+  'home.feature.stories': { ar: 'قصص الأنبياء', fr: 'Les Prophètes', en: 'Prophet Stories' },
+  'home.feature.qibla': { ar: 'القبلة', fr: 'Qibla', en: 'Qibla' },
+  'home.rooms.title': { ar: 'غرف الدردشة', fr: 'Salons de discussion', en: 'Chat Rooms' },
+  'home.rooms.desc': { ar: 'نقاشات + مكالمات جماعية', fr: 'Discussions + appels de groupe', en: 'Discussions + group calls' },
+  'home.feed.title': { ar: 'تأمّلات نور', fr: 'Méditations Noor', en: 'Noor Reflections' },
+  'home.feed.desc': { ar: 'محتوى يلمس القلب يومياً', fr: 'Du contenu qui touche le cœur', en: 'Heart-touching content daily' },
+  'home.chat.title': { ar: 'الدردشة الخاصة', fr: 'Messages privés', en: 'Private Chat' },
+  'home.chat.desc': { ar: 'رسائل مع المؤمنين', fr: 'Messages avec les croyants', en: 'Messages with believers' },
 };
 
 interface I18nCtx {
