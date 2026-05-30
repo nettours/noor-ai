@@ -782,16 +782,9 @@ app.post('/api/feed/generate', auth, async (req: any, res: Response): Promise<an
       return res.json({ success: true, generated: f });
     }
 
-    const prompt = `اكتب منشوراً إسلامياً قصيراً مؤثّراً جداً يلمس قلوب الشباب${topic ? ` عن: ${topic}` : ''}.
-الشروط:
-- جملة أو جملتين فقط (لا يتجاوز 30 كلمة)
-- مؤثّر، عميق، يحرّك المشاعر
-- يمكن أن يحتوي آية أو حديثاً قصيراً
-- بالعربية الفصحى الجميلة
-- بدون مقدمات، فقط المنشور مباشرة
+    const prompt = `اكتب منشوراً إسلامياً قصيراً مؤثّراً يلمس قلوب الشباب${topic ? ` عن: ${topic}` : ''}. جملة أو جملتين فقط (أقل من 30 كلمة). بالعربية الفصحى. يمكن أن يحتوي آية أو حديثاً. أعطني المنشور مباشرة بدون مقدمات أو علامات اقتباس.`;
 
-أعطني فقط المنشور بدون أي شرح أو علامات اقتباس.`;
-
+    console.log('🎨 generate: calling Gemini...');
     const r = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
@@ -799,16 +792,14 @@ app.post('/api/feed/generate', auth, async (req: any, res: Response): Promise<an
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: {
-            maxOutputTokens: 800,
-            temperature: 1.0,
-            thinkingConfig: { thinkingBudget: 0 },
-          },
+          generationConfig: { maxOutputTokens: 200 },
         }),
       }
     );
     const data: any = await r.json();
-    // اجمع كل الأجزاء (Gemini قد يقسّم النص لعدة parts)
+    console.log('🎨 generate Gemini status:', r.status, 'finishReason:', data.candidates?.[0]?.finishReason);
+
+    // اجمع كل الأجزاء
     const parts = data.candidates?.[0]?.content?.parts || [];
     const generated = parts.map((p: any) => p.text || '').join('').trim();
 
