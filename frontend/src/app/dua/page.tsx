@@ -2,7 +2,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowRight, Sparkles, Share2, Download, RefreshCw, Loader2, Palette, Heart
+  ArrowRight, Sparkles, Share2, Download, RefreshCw, Loader2, Palette, Heart,
+  MessageCircle, Copy, Check, X
 } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
@@ -34,6 +35,8 @@ export default function DuaCardsPage() {
   const [theme, setTheme] = useState(THEMES[0]);
   const [loading, setLoading] = useState(false);
   const [imgUrl, setImgUrl] = useState<string>('');
+  const [showOptions, setShowOptions] = useState(false);
+  const [copied, setCopied] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -131,18 +134,45 @@ export default function DuaCardsPage() {
     setImgUrl(canvas.toDataURL('image/png'));
   }, [dua, theme]);
 
-  // مشاركة (Web Share API مع صورة)
+  // مشاركة (Web Share API مع صورة) - مع بدائل واضحة
   const share = async () => {
-    if (!imgUrl) return;
+    if (!imgUrl || !dua) return;
     try {
       const blob = await (await fetch(imgUrl)).blob();
       const file = new File([blob], 'noor-dua.png', { type: 'image/png' });
+      // جرّب مشاركة الصورة (يعمل على الجوال)
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], text: 'دعاء من تطبيق نور AI 🌙' });
-      } else {
-        download();
+        return;
       }
-    } catch { download(); }
+      // جرّب مشاركة النص (بعض المتصفحات)
+      if (navigator.share) {
+        await navigator.share({ text: `${dua.text}\n﴿ ${dua.src} ﴾\n\n🌙 نور AI`, title: 'دعاء' });
+        return;
+      }
+      // لا دعم للمشاركة → افتح خيارات بديلة
+      setShowOptions(true);
+    } catch {
+      // المستخدم ألغى أو فشل → اعرض البدائل
+      setShowOptions(true);
+    }
+  };
+
+  // مشاركة على واتساب (نص الدعاء)
+  const shareWhatsApp = () => {
+    if (!dua) return;
+    const text = encodeURIComponent(`${dua.text}\n﴿ ${dua.src} ﴾\n\n🌙 من تطبيق نور AI`);
+    window.open(`https://wa.me/?text=${text}`, '_blank');
+  };
+
+  // نسخ نص الدعاء
+  const copyText = async () => {
+    if (!dua) return;
+    try {
+      await navigator.clipboard.writeText(`${dua.text}\n﴿ ${dua.src} ﴾\n\n🌙 نور AI`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
   };
 
   const download = () => {
@@ -281,7 +311,85 @@ export default function DuaCardsPage() {
         <canvas ref={canvasRef} style={{ display: 'none' }} />
       </div>
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      {/* ورقة خيارات المشاركة (تظهر إذا تعذّرت المشاركة المباشرة) */}
+      {showOptions && (
+        <div onClick={() => setShowOptions(false)} style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            width: '100%', maxWidth: '560px',
+            background: '#0F172A', borderRadius: '24px 24px 0 0',
+            padding: '24px 20px calc(env(safe-area-inset-bottom, 0px) + 24px)',
+            border: '1px solid rgba(255,255,255,0.1)', borderBottom: 'none',
+            animation: 'sheetUp 0.3s ease',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 800 }}>مشاركة الدعاء</h3>
+              <button onClick={() => setShowOptions(false)} style={{ background: 'none', border: 'none', color: '#9CA3AF', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '16px', lineHeight: 1.7 }}>
+              💡 احفظ الصورة ثم أرفقها، أو شارك نص الدعاء مباشرة
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {/* واتساب */}
+              <button onClick={() => { shareWhatsApp(); setShowOptions(false); }} style={{
+                display: 'flex', alignItems: 'center', gap: '14px', padding: '16px', borderRadius: '14px',
+                background: 'rgba(37,211,102,0.12)', border: '1px solid rgba(37,211,102,0.3)',
+                color: '#fff', cursor: 'pointer', width: '100%',
+              }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(37,211,102,0.2)', color: '#25D366', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <MessageCircle size={20} />
+                </div>
+                <div style={{ flex: 1, textAlign: 'start' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 700 }}>واتساب</div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>شارك نص الدعاء</div>
+                </div>
+              </button>
+
+              {/* حفظ الصورة */}
+              <button onClick={() => { download(); setShowOptions(false); }} style={{
+                display: 'flex', alignItems: 'center', gap: '14px', padding: '16px', borderRadius: '14px',
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff', cursor: 'pointer', width: '100%',
+              }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(16,185,129,0.2)', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Download size={20} />
+                </div>
+                <div style={{ flex: 1, textAlign: 'start' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 700 }}>حفظ الصورة</div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>للإرفاق في أي تطبيق</div>
+                </div>
+              </button>
+
+              {/* نسخ النص */}
+              <button onClick={copyText} style={{
+                display: 'flex', alignItems: 'center', gap: '14px', padding: '16px', borderRadius: '14px',
+                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                color: '#fff', cursor: 'pointer', width: '100%',
+              }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'rgba(103,232,249,0.2)', color: '#67E8F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {copied ? <Check size={20} /> : <Copy size={20} />}
+                </div>
+                <div style={{ flex: 1, textAlign: 'start' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 700 }}>{copied ? 'تم النسخ ✓' : 'نسخ النص'}</div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>الصقه أينما تريد</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }
