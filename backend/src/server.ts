@@ -946,6 +946,86 @@ app.post('/api/feed/generate', auth, async (req: any, res: Response): Promise<an
   }
 });
 
+// ═══════════════════════════════════════════════════════
+// 🎴 مولّد بطاقات الأدعية (Gemini) - للمشاركة
+// ═══════════════════════════════════════════════════════
+const DUA_FALLBACK: Record<string, { text: string; src: string }[]> = {
+  general: [
+    { text: 'اللَّهُمَّ إِنِّي أَسْأَلُكَ الْهُدَى وَالتُّقَى وَالْعَفَافَ وَالْغِنَى', src: 'رواه مسلم' },
+    { text: 'رَبَّنَا آتِنَا فِي الدُّنْيَا حَسَنَةً وَفِي الْآخِرَةِ حَسَنَةً وَقِنَا عَذَابَ النَّارِ', src: 'البقرة ٢٠١' },
+  ],
+  worry: [
+    { text: 'اللَّهُمَّ إِنِّي أَعُوذُ بِكَ مِنَ الْهَمِّ وَالْحَزَنِ، وَأَعُوذُ بِكَ مِنَ الْعَجْزِ وَالْكَسَلِ', src: 'رواه البخاري' },
+    { text: 'حَسْبُنَا اللَّهُ وَنِعْمَ الْوَكِيلُ', src: 'آل عمران ١٧٣' },
+  ],
+  success: [
+    { text: 'رَبِّ اشْرَحْ لِي صَدْرِي وَيَسِّرْ لِي أَمْرِي', src: 'طه ٢٥-٢٦' },
+    { text: 'اللَّهُمَّ لَا سَهْلَ إِلَّا مَا جَعَلْتَهُ سَهْلًا، وَأَنْتَ تَجْعَلُ الْحَزْنَ سَهْلًا', src: 'ابن حبان' },
+  ],
+  forgiveness: [
+    { text: 'رَبَّنَا ظَلَمْنَا أَنْفُسَنَا وَإِنْ لَمْ تَغْفِرْ لَنَا وَتَرْحَمْنَا لَنَكُونَنَّ مِنَ الْخَاسِرِينَ', src: 'الأعراف ٢٣' },
+    { text: 'اللَّهُمَّ أَنْتَ رَبِّي لَا إِلَهَ إِلَّا أَنْتَ، خَلَقْتَنِي وَأَنَا عَبْدُكَ', src: 'سيد الاستغفار' },
+  ],
+  gratitude: [
+    { text: 'رَبِّ أَوْزِعْنِي أَنْ أَشْكُرَ نِعْمَتَكَ الَّتِي أَنْعَمْتَ عَلَيَّ وَعَلَى وَالِدَيَّ', src: 'النمل ١٩' },
+    { text: 'الْحَمْدُ لِلَّهِ الَّذِي بِنِعْمَتِهِ تَتِمُّ الصَّالِحَاتُ', src: 'دعاء مأثور' },
+  ],
+};
+
+app.post('/api/dua/generate', auth, async (req: any, res: Response): Promise<any> => {
+  const user = users.get(req.userId);
+  if (!user) return res.status(401).json({ success: false });
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  const mood = (req.body?.mood || 'general').toString();         // الحالة: قلق/نجاح/استغفار...
+  const feeling = (req.body?.feeling || '').toString().slice(0, 200); // وصف حرّ اختياري
+
+  const pickFallback = () => {
+    const pool = DUA_FALLBACK[mood] || DUA_FALLBACK.general;
+    return pool[Math.floor(Math.random() * pool.length)];
+  };
+
+  try {
+    if (!apiKey) return res.json({ success: true, dua: pickFallback() });
+
+    const moodLabels: Record<string, string> = {
+      general: 'دعاء عام مبارك',
+      worry: 'دعاء لتفريج الهمّ والقلق والحزن',
+      success: 'دعاء للتيسير والنجاح والتوفيق',
+      forgiveness: 'دعاء للاستغفار والتوبة',
+      gratitude: 'دعاء للشكر والحمد على النعم',
+    };
+    const ask = moodLabels[mood] || moodLabels.general;
+    const prompt = `اختر دعاءً إسلامياً مأثوراً (من القرآن أو السنّة الصحيحة) مناسباً لـ: ${ask}.${feeling ? ` السياق: ${feeling}.` : ''}
+أرجع النتيجة بصيغة JSON فقط بدون أي نص آخر، بهذا الشكل بالضبط:
+{"text":"نص الدعاء بالعربية مع التشكيل","src":"المصدر مثل: رواه مسلم أو اسم السورة ورقم الآية"}
+اجعل الدعاء قصيراً (سطر أو سطرين) وصحيحاً ومأثوراً.`;
+
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 300, responseMimeType: 'application/json' },
+        }),
+      }
+    );
+    const data: any = await r.json();
+    const raw = (data.candidates?.[0]?.content?.parts || []).map((p: any) => p.text || '').join('').trim();
+
+    let dua = pickFallback();
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.text) dua = { text: parsed.text, src: parsed.src || 'دعاء مأثور' };
+    } catch {}
+    res.json({ success: true, dua });
+  } catch (err) {
+    res.json({ success: true, dua: pickFallback() });
+  }
+});
+
 // إعجاب / إلغاء إعجاب
 app.post('/api/feed/:id/like', auth, (req: any, res: Response): any => {
   const post = feedPosts.get(req.params.id);
