@@ -81,6 +81,7 @@ export default function HomePage() {
     { href: '/prayer', icon: Clock, title: t('home.feature.prayer'), color: '#F87171' },
     { href: '/stories', icon: Star, title: t('home.feature.stories'), color: '#FB923C' },
     { href: '/qibla', icon: Compass, title: t('home.feature.qibla'), color: '#FBBF24' },
+    { href: '/dua', icon: Heart, title: 'بطاقة دعاء', color: '#EC4899' },
   ];
 
   const dailyText = tab === 'verse' ? daily?.verse?.text : tab === 'hadith' ? daily?.hadith?.text : daily?.wisdom?.text;
