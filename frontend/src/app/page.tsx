@@ -4,65 +4,13 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  BookOpen, Bot, Phone, Clock, Compass, Heart,
-  Sparkles, Users, Star, Send, Shield, Zap, Globe,
-  ChevronLeft, ChevronRight, Check, TrendingUp,
-  MessageCircle, Facebook, Twitter, Instagram, Mail,
-  Smartphone, Award, Lock
+  Bot, ChevronRight, Send, Sparkles, Star,
+  Facebook, Twitter, Instagram, Mail,
 } from 'lucide-react';
-
-// ═══════════════════════════════════════════════════════
-// 7 SLIDES - تتبدّل كل 7 ثواني
-// ═══════════════════════════════════════════════════════
-const SLIDES = [
-  { badge: '📖 القرآن الكريم', title: 'استمع للقرآن', subtitle: 'بأصوات أعظم القراء', desc: '114 سورة كاملة بأصوات 6 قراء مشاهير: العفاسي، السديس، المنشاوي، الحصري، الحذيفي، عبدالباسط', color: '#10B981', gradient: 'linear-gradient(135deg, #10B981 0%, #059669 100%)', icon: BookOpen },
-  { badge: '🤖 مساعد ذكي', title: 'مساعد AI إسلامي', subtitle: 'مدعوم بـ Claude AI', desc: 'اسأل عن التفسير، الأحاديث، الفقه، الأدعية. مساعد ذكي يفهم العربية الفصحى ويجيب بأدب وعلم', color: '#67E8F9', gradient: 'linear-gradient(135deg, #67E8F9 0%, #06B6D4 100%)', icon: Bot },
-  { badge: '🏠 غرف الدردشة', title: 'انضم لغرف الإخوة', subtitle: 'مدارسة، فقه، علم، نقاش', desc: 'غرف موضوعية: مدارسة القرآن، الفقه والأحكام، طلاب العلم، شباب المسلمين، والأسرة المسلمة', color: '#A855F7', gradient: 'linear-gradient(135deg, #A855F7 0%, #7C3AED 100%)', icon: Users },
-  { badge: '📞 مكالمات HD', title: 'تواصل بصوت وفيديو', subtitle: 'مكالمات WebRTC مجانية', desc: 'مكالمات صوتية ومرئية مع إخوانك بجودة عالية. تشفير طرف لطرف، بدون تأخير، مجاناً تماماً', color: '#FBBF24', gradient: 'linear-gradient(135deg, #FBBF24 0%, #D97706 100%)', icon: Phone },
-  { badge: '💬 دردشة احترافية', title: 'تشارك الخير', subtitle: 'رسائل، صور، صوتية، ملفات', desc: 'دردشة فورية مع علامات قراءة، مؤشر الكتابة، رسائل صوتية، صور وملفات', color: '#EC4899', gradient: 'linear-gradient(135deg, #EC4899 0%, #BE185D 100%)', icon: Send },
-  { badge: '🕌 أوقات الصلاة', title: 'لا تفوتك صلاة', subtitle: 'مواقيت + قبلة + أذكار', desc: 'أوقات صلاة دقيقة حسب موقعك، بوصلة قبلة بـ GPS، أذكار يومية كاملة', color: '#F87171', gradient: 'linear-gradient(135deg, #F87171 0%, #DC2626 100%)', icon: Clock },
-  { badge: '📿 التسبيح الذكي', title: 'سبحة رقمية متقدمة', subtitle: 'احصِ ذكرك في كل مكان', desc: 'عدّاد تسبيح بأنواع متعددة مع إحصائيات يومية وتذكير', color: '#34D399', gradient: 'linear-gradient(135deg, #34D399 0%, #059669 100%)', icon: Sparkles },
-];
-
-const SUGGESTED_Q = [
-  'ما حكم الصلاة في السفر؟',
-  'اشرح لي تفسير سورة الفاتحة',
-  'كيف أحفظ القرآن بسرعة؟',
-  'ما فضل قراءة آية الكرسي؟',
-];
-
-const SERVICES = [
-  { icon: BookOpen, title: 'القرآن الكريم', desc: '114 سورة بـ 6 قراء مشاهير', color: '#10B981' },
-  { icon: Clock, title: 'مواقيت الصلاة', desc: 'دقيقة بحسب موقعك', color: '#F87171' },
-  { icon: Compass, title: 'بوصلة القبلة', desc: 'GPS عالي الدقة', color: '#FBBF24' },
-  { icon: Heart, title: 'الأذكار', desc: 'حصن المسلم كاملاً', color: '#EC4899' },
-  { icon: Star, title: 'القصص الإسلامية', desc: '25 قصة للأنبياء', color: '#A855F7' },
-  { icon: Sparkles, title: 'التسبيح الذكي', desc: 'سبحة رقمية متقدمة', color: '#34D399' },
-  { icon: Bot, title: 'AI تفسير القرآن', desc: 'تفسير ذكي لأي آية', color: '#67E8F9' },
-  { icon: MessageCircle, title: 'مساعد يومي', desc: 'إرشاد روحاني شخصي', color: '#60A5FA' },
-];
-
-const TESTIMONIALS = [
-  { name: 'أحمد المصري', role: 'طالب علم', text: 'تطبيق رائع، أصبح رفيقي اليومي في صلاتي وقراءتي للقرآن. التصميم احترافي جداً.', avatar: 'أ', color: '#10B981' },
-  { name: 'فاطمة الزهراء', role: 'مدرّسة قرآن', text: 'أستخدمه في تحفيظ بناتي. المساعد الذكي يساعدني في شرح التفاسير بطريقة مبسطة.', avatar: 'ف', color: '#EC4899' },
-  { name: 'محمد العتيبي', role: 'مهندس', text: 'غرف الدردشة فكرة عبقرية! أتناقش مع إخوة من كل العالم حول القرآن والفقه.', avatar: 'م', color: '#A855F7' },
-];
-
-const STATS = [
-  { num: 114, label: 'سورة كاملة', suffix: '' },
-  { num: 6, label: 'قراء مشاهير', suffix: '' },
-  { num: 1000, label: 'مستخدم نشط', suffix: '+' },
-  { num: 50000, label: 'استفسار AI', suffix: '+' },
-];
-
-const FEATURES = [
-  { icon: Zap, title: 'سرعة فائقة', desc: 'يفتح في ثانية واحدة', color: '#FBBF24' },
-  { icon: Bot, title: 'AI ذكي', desc: 'مدعوم بـ Claude', color: '#67E8F9' },
-  { icon: Award, title: 'تصميم عصري', desc: 'بجودة Apple', color: '#A855F7' },
-  { icon: Heart, title: 'تجربة روحانية', desc: 'مصممة بعناية', color: '#EC4899' },
-  { icon: Smartphone, title: 'موبايل أولاً', desc: 'يعمل على أي جهاز', color: '#10B981' },
-  { icon: Lock, title: 'خصوصية تامة', desc: 'بياناتك آمنة', color: '#F87171' },
-];
+import {
+  SUGGESTED_Q, SERVICES, TESTIMONIALS, STATS, FEATURES,
+} from '@/content/landing';
+import { Hero } from '@/components/landing/Hero';
 
 // ═══════════════════════════════════════════════════════
 //  MAIN COMPONENT
@@ -70,8 +18,6 @@ const FEATURES = [
 export default function NoorAIPremium() {
   const router = useRouter();
   const [isLoaded, setIsLoaded] = useState(false);
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
   const [aiTyping, setAiTyping] = useState('');
   const [activeQ, setActiveQ] = useState(0);
   const [stats, setStats] = useState([0, 0, 0, 0]);
@@ -87,13 +33,6 @@ export default function NoorAIPremium() {
     } catch {}
     setIsLoaded(true);
   }, [router]);
-
-  // Slider auto-rotate (7s)
-  useEffect(() => {
-    if (isPaused) return;
-    const t = setInterval(() => setCurrentSlide(prev => (prev + 1) % SLIDES.length), 7000);
-    return () => clearInterval(t);
-  }, [isPaused]);
 
   // AI typing animation
   useEffect(() => {
@@ -163,9 +102,6 @@ export default function NoorAIPremium() {
       </div>
     );
   }
-
-  const slide = SLIDES[currentSlide];
-  const SlideIcon = slide.icon;
 
   return (
     <div style={{
@@ -241,271 +177,9 @@ export default function NoorAIPremium() {
       <div style={{ position: 'relative', zIndex: 2 }}>
 
         {/* ═══════════════════════════════════════ */}
-        {/* SECTION 1: HERO SLIDER (نصف الشاشة) */}
+        {/* SECTION 1: HERO */}
         {/* ═══════════════════════════════════════ */}
-        <section style={{
-          minHeight: '90vh',
-          display: 'flex',
-          flexDirection: 'column',
-          position: 'relative',
-        }}>
-          {/* Floating orbs */}
-          <div style={{
-            position: 'absolute', top: '15%', right: '8%',
-            width: '320px', height: '320px',
-            borderRadius: '50%',
-            background: slide.color,
-            opacity: 0.2,
-            filter: 'blur(80px)',
-            transition: 'background 1.5s ease',
-            animation: 'noorFloat 6s ease-in-out infinite',
-            pointerEvents: 'none',
-          }} />
-          <div style={{
-            position: 'absolute', bottom: '15%', left: '8%',
-            width: '260px', height: '260px',
-            borderRadius: '50%',
-            background: slide.color,
-            opacity: 0.12,
-            filter: 'blur(60px)',
-            transition: 'background 1.5s ease',
-            animation: 'noorFloat 5s ease-in-out infinite 1s',
-            pointerEvents: 'none',
-          }} />
-
-          {/* Slide */}
-          <div
-            key={currentSlide}
-            style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-              padding: '40px 60px',
-              animation: 'slideIn 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
-              position: 'relative',
-              zIndex: 2,
-            }}
-          >
-            <div style={{
-              width: 'clamp(110px, 22vw, 160px)',
-              height: 'clamp(110px, 22vw, 160px)',
-              borderRadius: '36px',
-              background: slide.gradient,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: '28px',
-              boxShadow: `0 30px 100px ${slide.color}99`,
-              position: 'relative',
-            }}>
-              <SlideIcon size={72} color="#fff" strokeWidth={1.5} />
-              <div style={{
-                position: 'absolute', inset: '-14px',
-                borderRadius: '44px',
-                border: `2px solid ${slide.color}55`,
-                animation: 'noorPulse 3s infinite',
-              }} />
-              <div style={{
-                position: 'absolute', inset: '-28px',
-                borderRadius: '56px',
-                border: `1px solid ${slide.color}22`,
-                animation: 'noorPulse 3s 0.5s infinite',
-              }} />
-            </div>
-
-            <div style={{
-              padding: '8px 18px',
-              background: `${slide.color}22`,
-              border: `1px solid ${slide.color}55`,
-              borderRadius: '999px',
-              fontSize: '13px',
-              fontWeight: 700,
-              color: slide.color,
-              marginBottom: '20px',
-              backdropFilter: 'blur(10px)',
-            }}>
-              {slide.badge}
-            </div>
-
-            <h1 style={{
-              fontFamily: 'Amiri, serif',
-              fontSize: 'clamp(38px, 7vw, 72px)',
-              fontWeight: 700,
-              lineHeight: 1.1,
-              marginBottom: '14px',
-              maxWidth: '700px',
-              background: 'linear-gradient(180deg, #fff 30%, #9CA3AF 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-            }}>
-              {slide.title}
-            </h1>
-
-            <p style={{
-              fontSize: 'clamp(17px, 3vw, 24px)',
-              color: '#E5E7EB',
-              marginBottom: '20px',
-              fontWeight: 600,
-              maxWidth: '600px',
-            }}>
-              {slide.subtitle}
-            </p>
-
-            <p style={{
-              fontSize: 'clamp(13px, 2vw, 16px)',
-              color: '#9CA3AF',
-              lineHeight: 1.8,
-              maxWidth: '600px',
-              marginBottom: '32px',
-            }}>
-              {slide.desc}
-            </p>
-
-            {/* CTA Triple buttons */}
-            <div style={{
-              display: 'flex',
-              gap: '10px',
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-            }}>
-              <Link href="/auth/register" className="hero-cta-main" style={{
-                padding: '14px 28px',
-                background: slide.gradient,
-                color: '#fff',
-                borderRadius: '14px',
-                textDecoration: 'none',
-                fontSize: '14px',
-                fontWeight: 700,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                boxShadow: `0 16px 40px ${slide.color}66`,
-                transition: 'all 0.3s',
-              }}>
-                <Sparkles size={16} />
-                Start Journey
-              </Link>
-
-              <Link href="/auth/register" className="hero-cta-sec" style={{
-                padding: '14px 24px',
-                background: 'rgba(255,255,255,0.05)',
-                backdropFilter: 'blur(10px)',
-                color: '#fff',
-                borderRadius: '14px',
-                textDecoration: 'none',
-                fontSize: '14px',
-                fontWeight: 700,
-                border: '1px solid rgba(255,255,255,0.1)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}>
-                <Bot size={16} color="#67E8F9" />
-                Ask Noor AI
-              </Link>
-
-              <Link href="/auth/register" className="hero-cta-sec" style={{
-                padding: '14px 24px',
-                background: 'rgba(255,255,255,0.05)',
-                backdropFilter: 'blur(10px)',
-                color: '#fff',
-                borderRadius: '14px',
-                textDecoration: 'none',
-                fontSize: '14px',
-                fontWeight: 700,
-                border: '1px solid rgba(255,255,255,0.1)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}>
-                <BookOpen size={16} color="#FBBF24" />
-                Read Quran
-              </Link>
-            </div>
-          </div>
-
-          {/* Arrows */}
-          <button
-            onClick={() => { setCurrentSlide(p => (p - 1 + SLIDES.length) % SLIDES.length); setIsPaused(true); setTimeout(() => setIsPaused(false), 10000); }}
-            className="nav-arrow"
-            style={{
-              position: 'absolute', left: '20px', top: '50%',
-              transform: 'translateY(-50%)',
-              width: '48px', height: '48px',
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.06)',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', zIndex: 5,
-              transition: 'all 0.2s',
-            }}
-          >
-            <ChevronRight size={22} />
-          </button>
-
-          <button
-            onClick={() => { setCurrentSlide(p => (p + 1) % SLIDES.length); setIsPaused(true); setTimeout(() => setIsPaused(false), 10000); }}
-            className="nav-arrow"
-            style={{
-              position: 'absolute', right: '20px', top: '50%',
-              transform: 'translateY(-50%)',
-              width: '48px', height: '48px',
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.06)',
-              backdropFilter: 'blur(20px)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer', zIndex: 5,
-              transition: 'all 0.2s',
-            }}
-          >
-            <ChevronLeft size={22} />
-          </button>
-
-          {/* Dots */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: '6px',
-            padding: '12px 20px 30px',
-            position: 'relative',
-            zIndex: 5,
-          }}>
-            {SLIDES.map((s, i) => (
-              <button
-                key={i}
-                onClick={() => { setCurrentSlide(i); setIsPaused(true); setTimeout(() => setIsPaused(false), 10000); }}
-                style={{
-                  width: i === currentSlide ? '36px' : '8px',
-                  height: '6px',
-                  borderRadius: '3px',
-                  background: i === currentSlide ? slide.gradient : 'rgba(255,255,255,0.2)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  transition: 'all 0.5s',
-                  padding: 0,
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}
-              >
-                {i === currentSlide && !isPaused && (
-                  <div style={{
-                    position: 'absolute',
-                    top: 0, left: 0, bottom: 0,
-                    background: 'rgba(255,255,255,0.4)',
-                    animation: 'progressFill 7s linear',
-                  }} />
-                )}
-              </button>
-            ))}
-          </div>
-        </section>
+        <Hero />
 
         {/* ═══════════════════════════════════════ */}
         {/* SECTION 2: AI ASSISTANT SHOWCASE */}
@@ -1237,8 +911,50 @@ export default function NoorAIPremium() {
             fontSize: '12px',
             color: '#6B7280',
           }}>
-            <p style={{ marginBottom: '4px' }}>صُنع بحبّ 💚 لخدمة المسلمين حول العالم</p>
-            <p>نور AI © 2025 • SnetProDz</p>
+            <p style={{ marginBottom: '14px' }}>صُنع بإحسان 💚 لخدمة المسلمين حول العالم</p>
+
+            {/* ── Brand identity / signature ── */}
+            <div style={{
+              display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center',
+              justifyContent: 'center', gap: '8px 14px',
+              padding: '14px 22px', borderRadius: '16px',
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.07)',
+            }}>
+              <span style={{ color: '#9CA3AF' }}>
+                نور <span style={{ color: '#FBBF24', fontWeight: 700 }}>AI</span> © {new Date().getFullYear()}
+              </span>
+
+              <span style={{ color: '#374151' }}>•</span>
+
+              <a
+                href="https://www.snetprodz.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '7px',
+                  textDecoration: 'none', color: '#9CA3AF',
+                }}
+              >
+                <span style={{ color: '#6B7280' }}>منتج من</span>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '4px 11px', borderRadius: '999px',
+                  background: 'linear-gradient(135deg, rgba(16,185,129,0.14), rgba(217,119,6,0.10))',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  fontWeight: 800, fontSize: '12.5px', letterSpacing: '0.3px',
+                }}>
+                  <span style={{ color: '#F5F1E8' }}>SNet</span><span style={{ color: '#FBBF24' }}>Pro</span><span style={{ color: '#34D399' }}>Dz</span>
+                </span>
+              </a>
+            </div>
+
+            <p style={{ marginTop: '12px', color: '#6B7280' }}>
+              تطوير وتصميم:{' '}
+              <span style={{ color: '#D4D8DD', fontWeight: 600 }}>ساخي عبد الرحمن</span>
+              <span style={{ color: '#4B5563' }}> · </span>
+              <span style={{ color: '#9CA3AF', fontWeight: 600, direction: 'ltr', display: 'inline-block' }}>Sakhi Abderrahmane</span>
+            </p>
           </div>
         </footer>
       </div>

@@ -33,6 +33,14 @@ export default function CreatePostPage() {
     } catch { router.push('/auth/login'); }
   }, []);
 
+  // Prefill from the PWA share target (/share → /feed/create?shared=...).
+  useEffect(() => {
+    try {
+      const shared = new URLSearchParams(window.location.search).get('shared');
+      if (shared) setText((prev) => prev || shared);
+    } catch {}
+  }, []);
+
   const handleFileUpload = async (file: File) => {
     if (!cloudConfig?.configured) {
       alert('رفع الوسائط غير مُفعّل بعد. تأكّد من إعداد Cloudinary في Railway.');
