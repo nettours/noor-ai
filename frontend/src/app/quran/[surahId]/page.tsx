@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { audioPlayer, RECITER_INFO } from '@/components/audio/AudioBar';
 import { toast } from '@/components/ui/Toast';
+import { shareContent } from '@/lib/share';
 
 interface Ayah {
   number: number;
@@ -99,16 +100,9 @@ export default function SurahPage() {
 
   const shareAyah = async (text: string, n: number) => {
     const t = text + '\n\n📖 ' + (surah?.name || '') + ' — الآية ' + n + '\nنور AI 🌙';
+    if ((navigator as any).share) { await shareContent({ text: t, title: surah?.name }); return; }
     try {
-      if (navigator.share) {
-        await navigator.share({ text: t });
-        return;
-      }
-    } catch (e: any) {
-      if (e.name === 'AbortError') return;
-    }
-    try {
-      await navigator.clipboard.writeText(t);
+      await navigator.clipboard.writeText(t + '\n' + (typeof window !== 'undefined' ? window.location.href : ''));
       toast('📋 تم النسخ');
     } catch {
       toast('تعذّر النسخ', 'error');

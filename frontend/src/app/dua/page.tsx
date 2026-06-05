@@ -5,6 +5,7 @@ import {
   ArrowRight, Sparkles, Share2, Download, RefreshCw, Loader2, Palette, Heart,
   MessageCircle, Copy, Check, X
 } from 'lucide-react';
+import { shareContent } from '@/lib/share';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 
@@ -137,23 +138,17 @@ export default function DuaCardsPage() {
   // مشاركة (Web Share API مع صورة) - مع بدائل واضحة
   const share = async () => {
     if (!imgUrl || !dua) return;
+    const text = `${dua.text}\n﴿ ${dua.src} ﴾\n\n🌙 نور AI`;
     try {
       const blob = await (await fetch(imgUrl)).blob();
       const file = new File([blob], 'noor-dua.png', { type: 'image/png' });
-      // جرّب مشاركة الصورة (يعمل على الجوال)
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], text: 'دعاء من تطبيق نور AI 🌙' });
-        return;
+      if (navigator.share || navigator.clipboard) {
+        // shareContent attaches the app link and shares the image when supported.
+        const ok = await shareContent({ text, title: 'دعاء', files: [file] });
+        if (ok) return;
       }
-      // جرّب مشاركة النص (بعض المتصفحات)
-      if (navigator.share) {
-        await navigator.share({ text: `${dua.text}\n﴿ ${dua.src} ﴾\n\n🌙 نور AI`, title: 'دعاء' });
-        return;
-      }
-      // لا دعم للمشاركة → افتح خيارات بديلة
       setShowOptions(true);
     } catch {
-      // المستخدم ألغى أو فشل → اعرض البدائل
       setShowOptions(true);
     }
   };

@@ -483,6 +483,20 @@ function auth(req: any, res: Response, next: any) {
   } catch { res.status(401).json({ success: false }); }
 }
 
+// Optional auth: attaches req.userId when a valid token is present, but never
+// rejects. Used for public-readable endpoints (e.g. GET /feed) so visitors can
+// browse content while logged-in users still get personalized flags.
+function optionalAuth(req: any, _res: Response, next: any) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (token) {
+    try {
+      const decoded: any = jwt.verify(token, JWT_SECRET);
+      req.userId = decoded.userId;
+    } catch { /* ignore invalid token — treat as guest */ }
+  }
+  next();
+}
+
 // ═══ حماية الأدمن: يتحقّق أن المستخدم هو ADMIN_EMAIL ═══
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
 function adminAuth(req: any, res: Response, next: any) {
@@ -823,7 +837,7 @@ app.get('/api/rooms/:id/messages', auth, (req: any, res: Response): any => {
 // ═══════════════════════════════════════════════════════
 
 // جلب كل المنشورات (الأحدث أولاً)
-app.get('/api/feed', auth, (req: any, res: Response) => {
+app.get('/api/feed', optionalAuth, (req: any, res: Response) => {
   const posts = Array.from(feedPosts.values())
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .map(p => ({

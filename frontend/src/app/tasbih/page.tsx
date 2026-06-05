@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { shareContent } from '@/lib/share';
 
 const DHIKR = [
   { t:'سبحان الله',        tr:'Glory be to Allah',           n:33,  c:'#22C55E' },
@@ -102,7 +103,7 @@ export default function TasbihPage() {
             style={{ flex:1, padding:'13px', background:'rgba(16,30,52,0.8)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:50, color:'#EEE8DC', fontFamily:'Cairo,sans-serif', fontSize:14, fontWeight:700, cursor:'pointer' }}>
             🔄 إعادة
           </button>
-          <button onClick={() => { const t=`قلت "${d.t}" ${sessions*d.n+count} مرة 📿\nنور AI 🌙`; if(navigator.share)navigator.share({text:t});else{navigator.clipboard?.writeText(t);} }}
+          <button onClick={() => { const t=`قلت "${d.t}" ${sessions*d.n+count} مرة 📿\nنور AI 🌙`; shareContent({ text: t }); }}
             style={{ flex:1, padding:'13px', background:'linear-gradient(135deg,#166534,#16A34A)', border:'none', borderRadius:50, color:'#fff', fontFamily:'Cairo,sans-serif', fontSize:14, fontWeight:700, cursor:'pointer', boxShadow:'0 4px 16px rgba(22,163,74,0.3)' }}>
             📤 مشاركة
           </button>

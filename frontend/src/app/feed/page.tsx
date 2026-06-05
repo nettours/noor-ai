@@ -5,6 +5,7 @@ import {
   ArrowRight, Heart, Share2, Volume2, Pause, Plus,
   Sparkles, Trash2, Play, Loader2
 } from 'lucide-react';
+import { shareContent } from '@/lib/share';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 
@@ -98,12 +99,8 @@ export default function FeedPage() {
 
   const share = async (post: Post) => {
     const text = `${post.text}\n\n— ${post.authorName} عبر نور AI 🌙`;
-    if (navigator.share) {
-      try { await navigator.share({ text }); } catch {}
-    } else {
-      navigator.clipboard.writeText(text);
-      alert('تم نسخ المحتوى 📋');
-    }
+    const ok = await shareContent({ text });
+    if (ok && !(navigator as any).share) alert('تم نسخ المحتوى والرابط 📋');
   };
 
   const speak = (post: Post) => {

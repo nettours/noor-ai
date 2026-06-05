@@ -57,6 +57,9 @@ export function CallProvider({ children, socket, me }: { children: ReactNode; so
   const [callDuration, setCallDuration] = useState(0);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  // The real callId assigned by the backend. The initiator starts with 'pending'
+  // and learns the real id from call:ringing/call:accepted — ICE/end must use it.
+  const callIdRef = useRef<string>('');
   const pendingIceRef = useRef<RTCIceCandidate[]>([]);
   const durationTimerRef = useRef<any>(null);
   const ringtoneRef = useRef<HTMLAudioElement | null>(null);
@@ -75,6 +78,7 @@ export function CallProvider({ children, socket, me }: { children: ReactNode; so
 
     socket.on('call:incoming', (data: any) => {
       console.log('📞 Incoming call:', data);
+      callIdRef.current = data.callId;
       setCallInfo({
         callId: data.callId,
         type: data.type,
@@ -91,11 +95,13 @@ export function CallProvider({ children, socket, me }: { children: ReactNode; so
 
     socket.on('call:ringing', ({ callId }: any) => {
       console.log('☎️ Ringing...');
+      if (callId) { callIdRef.current = callId; setCallInfo(prev => prev ? { ...prev, callId } : prev); }
       setState('outgoing');
     });
 
     socket.on('call:accepted', async ({ callId }: any) => {
       console.log('✅ Call accepted, sending offer...');
+      if (callId) { callIdRef.current = callId; setCallInfo(prev => prev ? { ...prev, callId } : prev); }
       setState('connecting');
       ringtoneRef.current?.pause();
       // Caller creates and sends offer
@@ -199,10 +205,10 @@ export function CallProvider({ children, socket, me }: { children: ReactNode; so
       setRemoteStream(event.streams[0]);
     };
 
-    // Send ICE candidates
+    // Send ICE candidates — always use the real (possibly updated) callId.
     pc.onicecandidate = (event) => {
       if (event.candidate && socket) {
-        socket.emit('call:ice', { callId, candidate: event.candidate });
+        socket.emit('call:ice', { callId: callIdRef.current || callId, candidate: event.candidate });
       }
     };
 
@@ -236,7 +242,8 @@ export function CallProvider({ children, socket, me }: { children: ReactNode; so
   const initiateCall = async (remoteUser: any, type: 'audio' | 'video') => {
     try {
       const stream = await getMedia(type);
-      const callId = 'pending'; // will be replaced
+      const callId = 'pending'; // replaced by the real id on call:ringing/accepted
+      callIdRef.current = callId;
       setCallInfo({
         callId,
         type,
@@ -261,8 +268,8 @@ export function CallProvider({ children, socket, me }: { children: ReactNode; so
     try {
       ringtoneRef.current?.pause();
       const stream = await getMedia(callInfo.type);
-      setupPeerConnection(stream, callInfo.callId);
-      socket?.emit('call:accept', { callId: callInfo.callId });
+      setupPeerConnection(stream, callIdRef.current || callInfo.callId);
+      socket?.emit('call:accept', { callId: callIdRef.current || callInfo.callId });
       setState('connecting');
     } catch (e: any) {
       console.error('Accept error:', e);
@@ -273,7 +280,7 @@ export function CallProvider({ children, socket, me }: { children: ReactNode; so
 
   // ─── Reject call ───────────────────────────────
   const rejectCall = () => {
-    if (callInfo) socket?.emit('call:reject', { callId: callInfo.callId });
+    if (callInfo) socket?.emit('call:reject', { callId: callIdRef.current || callInfo.callId });
     ringtoneRef.current?.pause();
     cleanup();
     setState('idle');
@@ -281,7 +288,7 @@ export function CallProvider({ children, socket, me }: { children: ReactNode; so
 
   // ─── End call ──────────────────────────────────
   const endCall = () => {
-    if (callInfo) socket?.emit('call:end', { callId: callInfo.callId });
+    if (callInfo) socket?.emit('call:end', { callId: callIdRef.current || callInfo.callId });
     ringtoneRef.current?.pause();
     cleanup();
     setState('idle');
@@ -327,6 +334,7 @@ export function CallProvider({ children, socket, me }: { children: ReactNode; so
     }
     setRemoteStream(null);
     pendingIceRef.current = [];
+    callIdRef.current = '';
     setCallInfo(null);
     setIsMuted(false);
     setIsVideoOff(false);

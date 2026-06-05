@@ -5,6 +5,7 @@ import {
   ArrowRight, Sparkles, Copy, Share2, Download,
   Edit, Save, Mic, Volume2, BookOpen, FileText
 } from 'lucide-react';
+import { shareContent } from '@/lib/share';
 
 const TOPICS = [
   { id: 'patience', label: 'الصبر', icon: '⏳', color: '#10B981' },
@@ -148,11 +149,7 @@ export default function ImamPage() {
   };
 
   const shareKhutbah = () => {
-    if (navigator.share) {
-      navigator.share({ title: `خطبة جمعة: ${selectedTopic?.label || customTopic}`, text: khutbah });
-    } else {
-      copyKhutbah();
-    }
+    shareContent({ title: `خطبة جمعة: ${selectedTopic?.label || customTopic}`, text: khutbah });
   };
 
   const download = () => {

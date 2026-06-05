@@ -131,7 +131,7 @@ export function Hero() {
           style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}
         >
           <Link
-            href="/auth/register"
+            href="/auth/login?tab=register"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
               padding: '15px 32px', borderRadius: 14, fontSize: 16, fontWeight: 800,

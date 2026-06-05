@@ -21,7 +21,10 @@ export default function AuthPage() {
   useEffect(() => {
     try {
       const token = localStorage.getItem('noor_token');
-      if (token) router.push('/home');
+      if (token) { router.push('/home'); return; }
+      // Open the "create account" tab when arriving from /auth/register or a CTA.
+      const tab = new URLSearchParams(window.location.search).get('tab');
+      if (tab === 'register') setMode('register');
     } catch {}
   }, []);
 

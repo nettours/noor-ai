@@ -7,8 +7,10 @@ import {
   MessageCircle, Star, ChevronLeft, LogOut, Volume2, Pause, GraduationCap
 } from 'lucide-react';
 import { useI18n } from '@/components/ui/I18nProvider';
+import { NextPrayerCard, StreakCard, DailyChallenges, HijriDate } from '@/components/common';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
+const PRAYER_API = 'https://api.aladhan.com/v1/timings';
 
 export default function HomePage() {
   const router = useRouter();
@@ -19,6 +21,12 @@ export default function HomePage() {
   const [daily, setDaily] = useState<any>(null);
   const [tab, setTab] = useState<'verse' | 'hadith' | 'wisdom'>('verse');
   const [speaking, setSpeaking] = useState(false);
+
+  // Prayer widget + gamification stats
+  const [prayerTimes, setPrayerTimes] = useState<Record<string, string>>({});
+  const [prayerLoading, setPrayerLoading] = useState(true);
+  const [city, setCity] = useState('');
+  const [stats, setStats] = useState({ points: 0, streak: 1, level: 'BEGINNER' });
 
   useEffect(() => {
     try {
@@ -40,6 +48,35 @@ export default function HomePage() {
     update();
     const timer = setInterval(update, 60000);
     fetch(API + '/daily').then(r => r.json()).then(d => { if (d.success) setDaily(d); }).catch(() => {});
+
+    // Prayer times (public API, no backend needed) via geolocation → fallback Mecca.
+    const fetchTimes = async (lat: number, lng: number) => {
+      try {
+        const r = await fetch(`${PRAYER_API}?latitude=${lat}&longitude=${lng}&method=4`);
+        const d = await r.json();
+        if (d.data?.timings) {
+          setPrayerTimes(d.data.timings);
+          setCity((d.data.meta?.timezone || '').split('/').pop()?.replace(/_/g, ' ') || '');
+        }
+      } catch {}
+      finally { setPrayerLoading(false); }
+    };
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => fetchTimes(pos.coords.latitude, pos.coords.longitude),
+        () => { setCity('مكة المكرمة'); fetchTimes(21.4225, 39.8262); },
+        { timeout: 10000 }
+      );
+    } else { setCity('مكة المكرمة'); fetchTimes(21.4225, 39.8262); }
+
+    // Gamification stats from localStorage (points written by DailyChallenges).
+    try {
+      const points = parseInt(localStorage.getItem('noor_pts') || '0', 10);
+      const streak = parseInt(localStorage.getItem('noor_streak') || '1', 10);
+      const level = points >= 2000 ? 'ADVANCED' : points >= 500 ? 'INTERMEDIATE' : 'BEGINNER';
+      setStats({ points, streak, level });
+    } catch {}
+
     return () => { clearInterval(timer); window.speechSynthesis?.cancel(); };
   }, [lang]);
 
@@ -90,10 +127,11 @@ export default function HomePage() {
     <div style={{ minHeight: '100dvh', background: '#030712', color: '#fff' }}>
       <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 20px 110px', maxWidth: '680px', margin: '0 auto' }}>
 
-        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px' }}>
+        <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div>
-            <div style={{ fontSize: '13px', color: '#6B7280', marginBottom: '2px' }}>{greeting} 🌙</div>
-            <div style={{ fontSize: '24px', fontWeight: 800, letterSpacing: '-0.5px' }}>{me.name}</div>
+            <div style={{ fontSize: '13px', color: '#6B7280', marginBottom: '4px' }}>{greeting} 🌙</div>
+            <div style={{ fontSize: '24px', fontWeight: 800, letterSpacing: '-0.5px', marginBottom: '8px' }}>{me.name}</div>
+            <HijriDate />
           </div>
           <button onClick={logout} style={{
             width: '44px', height: '44px', borderRadius: '14px',
@@ -104,8 +142,14 @@ export default function HomePage() {
           </button>
         </header>
 
-        <div style={{ fontSize: '13px', color: '#9CA3AF', textAlign: 'center', marginBottom: '20px', fontWeight: 500 }}>
-          🕌 {time}
+        {/* Next prayer countdown — highest-value glanceable widget */}
+        <div style={{ marginBottom: '16px' }}>
+          <NextPrayerCard prayerTimes={prayerTimes} isLoading={prayerLoading} city={city} />
+        </div>
+
+        {/* Gamification stats */}
+        <div style={{ marginBottom: '28px' }}>
+          <StreakCard streak={stats.streak} points={stats.points} level={stats.level} />
         </div>
 
         <div style={{
@@ -182,12 +226,17 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* Daily challenges — drives engagement & feeds the points/streak above */}
+        <div style={{ marginBottom: '28px' }}>
+          <DailyChallenges />
+        </div>
+
         <div style={{ marginBottom: '16px' }}>
           <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#9CA3AF', marginBottom: '16px', paddingRight: '4px' }}>
             {t('home.section.community')}
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <Link href="/community" className="wide-tile" style={{
+            <Link href="/rooms" className="wide-tile" style={{
               display: 'flex', alignItems: 'center', gap: '16px', padding: '20px',
               borderRadius: '20px', textDecoration: 'none', color: '#fff',
               background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(124,58,237,0.08))',

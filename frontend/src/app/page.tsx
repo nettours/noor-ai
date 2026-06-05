@@ -11,6 +11,7 @@ import {
   SUGGESTED_Q, SERVICES, TESTIMONIALS, STATS, FEATURES,
 } from '@/content/landing';
 import { Hero } from '@/components/landing/Hero';
+import { Reflections } from '@/components/landing/Reflections';
 
 // ═══════════════════════════════════════════════════════
 //  MAIN COMPONENT
@@ -319,7 +320,7 @@ export default function NoorAIPremium() {
               {SUGGESTED_Q.map((q, i) => (
                 <button
                   key={i}
-                  onClick={() => router.push('/auth/register')}
+                  onClick={() => router.push('/auth/login?tab=register')}
                   style={{
                     padding: '8px 14px',
                     background: i === activeQ ? 'rgba(103,232,249,0.15)' : 'rgba(255,255,255,0.03)',
@@ -472,6 +473,11 @@ export default function NoorAIPremium() {
             })}
           </div>
         </section>
+
+        {/* ═══════════════════════════════════════ */}
+        {/* SECTION 3.5: تأملات نور (public reflections) */}
+        {/* ═══════════════════════════════════════ */}
+        <Reflections />
 
         {/* ═══════════════════════════════════════ */}
         {/* SECTION 4: STATS COUNTERS */}
@@ -769,7 +775,7 @@ export default function NoorAIPremium() {
                 مجاني تماماً • بدون إعلانات
               </p>
 
-              <Link href="/auth/register" className="hero-cta-main" style={{
+              <Link href="/auth/login?tab=register" className="hero-cta-main" style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '10px',
@@ -943,6 +949,7 @@ export default function NoorAIPremium() {
                   background: 'linear-gradient(135deg, rgba(16,185,129,0.14), rgba(217,119,6,0.10))',
                   border: '1px solid rgba(255,255,255,0.12)',
                   fontWeight: 800, fontSize: '12.5px', letterSpacing: '0.3px',
+                  direction: 'ltr', unicodeBidi: 'isolate',
                 }}>
                   <span style={{ color: '#F5F1E8' }}>SNet</span><span style={{ color: '#FBBF24' }}>Pro</span><span style={{ color: '#34D399' }}>Dz</span>
                 </span>

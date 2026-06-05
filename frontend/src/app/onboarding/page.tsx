@@ -50,13 +50,13 @@ export default function OnboardingPage() {
     if (step < SLIDES.length - 1) setStep(step + 1);
     else {
       localStorage.setItem('noor_onboarded', '1');
-      router.push('/auth/register');
+      router.push('/auth/login?tab=register');
     }
   };
 
   const skip = () => {
     localStorage.setItem('noor_onboarded', '1');
-    router.push('/auth/register');
+    router.push('/auth/login?tab=register');
   };
 
   return (
