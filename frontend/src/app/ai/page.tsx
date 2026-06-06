@@ -9,12 +9,19 @@ import {
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 
+interface ScholarSource {
+  type: 'quran' | 'hadith' | 'tafsir';
+  text: string;
+  ref: string;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
   streaming?: boolean;
+  sources?: ScholarSource[];
 }
 
 const SUGGESTED_PROMPTS = [
@@ -135,6 +142,14 @@ export default function AIChatPage() {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
+                if (data.sources) {
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    const last = updated[updated.length - 1];
+                    if (last && last.role === 'assistant') last.sources = data.sources;
+                    return updated;
+                  });
+                }
                 if (data.text) {
                   accumulated += data.text;
                   setMessages(prev => {
@@ -302,11 +317,11 @@ export default function AIChatPage() {
 
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <h2 style={{ fontSize: '15px', fontWeight: 800 }}>Noor AI</h2>
+            <h2 style={{ fontSize: '15px', fontWeight: 800 }}>نور Scholar</h2>
             <Sparkles size={12} color="#FBBF24" />
           </div>
           <p style={{ fontSize: '11px', color: '#10B981' }}>
-            🟢 مساعدك الإسلامي • مدعوم بـ Claude
+            🟢 يبحث في القرآن والحديث قبل الإجابة
           </p>
         </div>
 
@@ -378,7 +393,7 @@ export default function AIChatPage() {
               marginBottom: '8px',
               fontWeight: 500,
             }}>
-              أنا Noor AI — مساعدك الإسلامي الذكي
+              أنا نور Scholar — عالِمك الإسلامي المؤصَّل بالمصادر
             </p>
 
             <p style={{
@@ -519,6 +534,40 @@ export default function AIChatPage() {
                   }} />
                 )}
               </div>
+
+              {msg.role === 'assistant' && msg.sources && msg.sources.length > 0 && (
+                <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#FBBF24', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    📚 المصادر المعتمَدة ({msg.sources.length})
+                  </div>
+                  {msg.sources.map((s, si) => {
+                    const st = s.type === 'quran'
+                      ? { bg: 'rgba(16,185,129,0.08)', bd: 'rgba(52,211,153,0.25)', body: '#6EE7B7', ref: '#34D399', icon: '📖', quran: true, open: '﴿ ', close: ' ﴾' }
+                      : s.type === 'tafsir'
+                      ? { bg: 'rgba(59,130,246,0.08)', bd: 'rgba(96,165,250,0.25)', body: '#BFDBFE', ref: '#60A5FA', icon: '📘', quran: false, open: '', close: '' }
+                      : { bg: 'rgba(217,119,6,0.08)', bd: 'rgba(251,191,36,0.22)', body: '#E5E7EB', ref: '#FBBF24', icon: '🗞️', quran: false, open: '«', close: '»' };
+                    return (
+                      <div key={si} style={{
+                        background: st.bg, border: `1px solid ${st.bd}`,
+                        borderRadius: '12px', padding: '10px 12px',
+                      }}>
+                        <div style={{
+                          fontFamily: st.quran ? 'Amiri, serif' : 'inherit',
+                          fontSize: st.quran ? '15px' : '13px',
+                          lineHeight: st.quran ? 1.9 : 1.75,
+                          color: st.body,
+                          direction: 'rtl', textAlign: 'right', marginBottom: '6px',
+                        }}>
+                          {st.open}{s.text}{st.close}
+                        </div>
+                        <div style={{ fontSize: '11px', fontWeight: 700, color: st.ref, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          {st.icon} {s.ref}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {msg.role === 'assistant' && !msg.streaming && msg.content && (
                 <div style={{
