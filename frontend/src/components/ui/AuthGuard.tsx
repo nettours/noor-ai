@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
-const PUBLIC_PATHS = ['/', '/auth/login', '/auth/register', '/onboarding', '/post'];
+const PUBLIC_PATHS = ['/', '/auth/login', '/auth/register', '/onboarding', '/post', '/about', '/privacy', '/terms'];
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();

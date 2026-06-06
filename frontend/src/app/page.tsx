@@ -831,7 +831,7 @@ export default function NoorAIPremium() {
               </p>
               <div style={{ display: 'flex', gap: '10px' }}>
                 {[Facebook, Twitter, Instagram, Mail].map((I, i) => (
-                  <a key={i} href="#" style={{
+                  <a key={i} href="https://www.snetprodz.com" target="_blank" rel="noopener noreferrer" style={{
                     width: '36px', height: '36px',
                     borderRadius: '10px',
                     background: 'rgba(255,255,255,0.05)',
@@ -850,22 +850,37 @@ export default function NoorAIPremium() {
             {/* Links */}
             <div>
               <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '14px', color: '#fff' }}>المنصة</h4>
-              {['الميزات', 'القرآن', 'الصلاة', 'غرف الدردشة'].map(l => (
-                <a key={l} href="#" style={{
+              {[
+                { l: 'عن المنصة', href: '/about' },
+                { l: 'القرآن', href: '/quran' },
+                { l: 'الصلاة', href: '/prayer' },
+                { l: 'غرف الدردشة', href: '/rooms' },
+              ].map(({ l, href }) => (
+                <Link key={l} href={href} style={{
                   display: 'block', fontSize: '13px', color: '#9CA3AF',
                   textDecoration: 'none', marginBottom: '10px',
                   transition: 'color 0.2s',
-                }} className="footer-link">{l}</a>
+                }} className="footer-link">{l}</Link>
               ))}
             </div>
 
             <div>
               <h4 style={{ fontSize: '14px', fontWeight: 700, marginBottom: '14px', color: '#fff' }}>الشركة</h4>
-              {['عن نور AI', 'تواصل معنا', 'الخصوصية', 'الشروط'].map(l => (
-                <a key={l} href="#" style={{
+              {[
+                { l: 'عن نور AI', href: '/about', ext: false },
+                { l: 'تواصل معنا', href: 'https://www.snetprodz.com', ext: true },
+                { l: 'الخصوصية', href: '/privacy', ext: false },
+                { l: 'الشروط', href: '/terms', ext: false },
+              ].map(({ l, href, ext }) => ext ? (
+                <a key={l} href={href} target="_blank" rel="noopener noreferrer" style={{
                   display: 'block', fontSize: '13px', color: '#9CA3AF',
                   textDecoration: 'none', marginBottom: '10px',
                 }} className="footer-link">{l}</a>
+              ) : (
+                <Link key={l} href={href} style={{
+                  display: 'block', fontSize: '13px', color: '#9CA3AF',
+                  textDecoration: 'none', marginBottom: '10px',
+                }} className="footer-link">{l}</Link>
               ))}
             </div>
 
