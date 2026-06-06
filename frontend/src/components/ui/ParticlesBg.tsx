@@ -5,6 +5,9 @@ export function ParticlesBg() {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    // Respect users who prefer reduced motion — skip the animation entirely.
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
     const canvas = ref.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -15,7 +18,9 @@ export function ParticlesBg() {
     const resize = () => { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; };
     window.addEventListener('resize', resize);
 
-    const pts = Array.from({ length: 60 }, () => ({
+    // Fewer particles on small screens (lighter on weak devices).
+    const COUNT = window.innerWidth < 640 ? 30 : 60;
+    const pts = Array.from({ length: COUNT }, () => ({
       x: Math.random() * W,
       y: Math.random() * H,
       vx: (Math.random() - 0.5) * 0.3,
@@ -55,8 +60,16 @@ export function ParticlesBg() {
     };
     draw();
 
+    // Pause the loop while the tab is hidden (saves CPU/battery).
+    const onVisibility = () => {
+      if (document.hidden) cancelAnimationFrame(rafId);
+      else { cancelAnimationFrame(rafId); draw(); }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
     return () => {
       window.removeEventListener('resize', resize);
+      document.removeEventListener('visibilitychange', onVisibility);
       cancelAnimationFrame(rafId);
     };
   }, []);
