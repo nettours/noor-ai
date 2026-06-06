@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useI18n } from '@/components/ui/I18nProvider';
 import { NextPrayerCard, StreakCard, DailyChallenges, HijriDate } from '@/components/common';
+import { SalahTracker } from '@/components/common/SalahTracker';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 const PRAYER_API = 'https://api.aladhan.com/v1/timings';
@@ -145,6 +146,11 @@ export default function HomePage() {
         {/* Next prayer countdown — highest-value glanceable widget */}
         <div style={{ marginBottom: '16px' }}>
           <NextPrayerCard prayerTimes={prayerTimes} isLoading={prayerLoading} city={city} />
+        </div>
+
+        {/* رحلة نور — daily salah streak + lantern (core habit loop) */}
+        <div style={{ marginBottom: '16px' }}>
+          <SalahTracker />
         </div>
 
         {/* Gamification stats */}
