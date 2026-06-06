@@ -183,6 +183,11 @@ export default function NoorAIPremium() {
         <Hero />
 
         {/* ═══════════════════════════════════════ */}
+        {/* SECTION 1.5: تأملات نور (first view, public) */}
+        {/* ═══════════════════════════════════════ */}
+        <Reflections />
+
+        {/* ═══════════════════════════════════════ */}
         {/* SECTION 2: AI ASSISTANT SHOWCASE */}
         {/* ═══════════════════════════════════════ */}
         <section style={{
@@ -473,11 +478,6 @@ export default function NoorAIPremium() {
             })}
           </div>
         </section>
-
-        {/* ═══════════════════════════════════════ */}
-        {/* SECTION 3.5: تأملات نور (public reflections) */}
-        {/* ═══════════════════════════════════════ */}
-        <Reflections />
 
         {/* ═══════════════════════════════════════ */}
         {/* SECTION 4: STATS COUNTERS */}

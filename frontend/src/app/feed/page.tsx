@@ -5,7 +5,7 @@ import {
   ArrowRight, Heart, Share2, Volume2, Pause, Plus,
   Sparkles, Trash2, Play, Loader2
 } from 'lucide-react';
-import { shareContent } from '@/lib/share';
+import { shareContent, SITE_URL } from '@/lib/share';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 
@@ -99,7 +99,8 @@ export default function FeedPage() {
 
   const share = async (post: Post) => {
     const text = `${post.text}\n\n— ${post.authorName} عبر نور AI 🌙`;
-    const ok = await shareContent({ text });
+    // Content-specific permalink so the shared link opens this exact reflection.
+    const ok = await shareContent({ text, url: `${SITE_URL}/post/${post.id}` });
     if (ok && !(navigator as any).share) alert('تم نسخ المحتوى والرابط 📋');
   };
 

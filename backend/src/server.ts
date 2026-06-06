@@ -1073,6 +1073,32 @@ app.get('/api/feed/upload-config', auth, (_req: any, res: Response) => {
   });
 });
 
+// منشور واحد (عام للزوّار) — يُستخدم لروابط المشاركة المباشرة /post/:id
+// Defined AFTER the specific /api/feed/* routes so they match first.
+app.get('/api/feed/:id', optionalAuth, (req: any, res: Response): any => {
+  const p = feedPosts.get(req.params.id);
+  if (!p) return res.status(404).json({ success: false, error: 'المنشور غير موجود' });
+  res.json({
+    success: true,
+    post: {
+      id: p.id,
+      authorId: p.authorId,
+      authorName: p.authorName,
+      authorAvatar: p.authorAvatar,
+      authorColor: p.authorColor,
+      kind: p.kind,
+      text: p.text,
+      mediaUrl: p.mediaUrl,
+      category: p.category,
+      gradient: p.gradient,
+      likeCount: p.likes.size,
+      likedByMe: p.likes.has(req.userId),
+      isMine: p.authorId === req.userId,
+      createdAt: p.createdAt,
+    },
+  });
+});
+
 // ═══════════════════════════════════════════════════════
 // 👑 ADMIN PANEL (محمي بـ ADMIN_EMAIL)
 // ═══════════════════════════════════════════════════════
