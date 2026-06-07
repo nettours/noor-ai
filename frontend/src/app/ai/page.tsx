@@ -44,6 +44,7 @@ export default function AIChatPage() {
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const autoAskedRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -66,6 +67,20 @@ export default function AIChatPage() {
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Auto-ask when arriving with ?q= (e.g. from "درس اليوم → اسأل نور Scholar").
+  useEffect(() => {
+    if (!me || autoAskedRef.current) return;
+    try {
+      const q = new URLSearchParams(window.location.search).get('q');
+      if (q && q.trim()) {
+        autoAskedRef.current = true;
+        window.history.replaceState(null, '', '/ai');
+        sendMessage(q.trim());
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me]);
 
   // Save to localStorage
   useEffect(() => {

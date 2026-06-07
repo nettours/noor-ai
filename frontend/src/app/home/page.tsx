@@ -9,6 +9,8 @@ import {
 import { useI18n } from '@/components/ui/I18nProvider';
 import { NextPrayerCard, StreakCard, DailyChallenges, HijriDate } from '@/components/common';
 import { SalahTracker } from '@/components/common/SalahTracker';
+import { PrayerNotifyButton } from '@/components/common/PrayerNotifyButton';
+import { DailyLesson } from '@/components/common/DailyLesson';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 const PRAYER_API = 'https://api.aladhan.com/v1/timings';
@@ -153,6 +155,11 @@ export default function HomePage() {
           <SalahTracker />
         </div>
 
+        {/* Prayer-time push notifications (retention backbone) */}
+        <div style={{ marginBottom: '16px' }}>
+          <PrayerNotifyButton prayerTimes={prayerTimes} />
+        </div>
+
         {/* Gamification stats */}
         <div style={{ marginBottom: '28px' }}>
           <StreakCard streak={stats.streak} points={stats.points} level={stats.level} />
@@ -230,6 +237,11 @@ export default function HomePage() {
               </Link>
             ))}
           </div>
+        </div>
+
+        {/* درس اليوم — daily ayah + tafsir, funnels to Noor Scholar */}
+        <div style={{ marginBottom: '20px' }}>
+          <DailyLesson />
         </div>
 
         {/* Daily challenges — drives engagement & feeds the points/streak above */}

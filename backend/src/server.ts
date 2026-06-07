@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { MongoClient } from 'mongodb';
+import webpush from 'web-push';
 
 interface User {
   id: string; name: string; email: string;
@@ -1476,6 +1477,94 @@ app.post('/api/ai/chat', auth, async (req: any, res: Response) => {
     if (!res.headersSent) res.status(500).json({ success: false });
   }
 });
+
+// ═══════════════════════════════════════════════════════════════
+// WEB PUSH — Prayer-time notifications (the retention backbone)
+// ═══════════════════════════════════════════════════════════════
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:contact@snetprodz.com';
+const pushEnabled = !!(VAPID_PUBLIC && VAPID_PRIVATE);
+if (pushEnabled) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+  console.log('🔔 Web Push: ✅ enabled');
+} else {
+  console.log('🔔 Web Push: ❌ disabled (set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)');
+}
+
+interface PushSub {
+  subscription: any;
+  prayers: Record<string, string>;   // { Fajr:'05:12', Dhuhr:'12:30', ... } local HH:MM
+  tzOffset: number;                   // minutes east of UTC (= -getTimezoneOffset())
+  lastSent: Record<string, string>;   // prayerKey -> 'YYYY-M-D HH:MM' (dedupe)
+}
+// In-memory (resets on restart; clients re-subscribe on app open). Upgrade: persist to Mongo.
+const pushSubs = new Map<string, PushSub>();
+const PRAYER_AR: Record<string, string> = {
+  Fajr: 'الفجر', Dhuhr: 'الظهر', Asr: 'العصر', Maghrib: 'المغرب', Isha: 'العشاء',
+};
+
+app.get('/api/push/vapid', (_req, res) => res.json({ key: VAPID_PUBLIC, enabled: pushEnabled }));
+
+app.post('/api/push/subscribe', (req: Request, res: Response): any => {
+  const { subscription, prayers, tzOffset } = req.body || {};
+  if (!subscription?.endpoint) return res.status(400).json({ success: false, error: 'اشتراك غير صالح' });
+  const clean: Record<string, string> = {};
+  for (const k of Object.keys(PRAYER_AR)) {
+    if (prayers?.[k]) clean[k] = String(prayers[k]).slice(0, 5);
+  }
+  pushSubs.set(subscription.endpoint, {
+    subscription, prayers: clean, tzOffset: Number(tzOffset) || 0, lastSent: {},
+  });
+  res.json({ success: true });
+});
+
+app.post('/api/push/unsubscribe', (req: Request, res: Response): any => {
+  const ep = req.body?.endpoint;
+  if (ep) pushSubs.delete(ep);
+  res.json({ success: true });
+});
+
+app.post('/api/push/test', async (req: Request, res: Response): Promise<any> => {
+  if (!pushEnabled) return res.status(503).json({ success: false, error: 'الإشعارات غير مُفعّلة على الخادم' });
+  const sub = pushSubs.get(req.body?.endpoint);
+  if (!sub) return res.status(404).json({ success: false, error: 'لا يوجد اشتراك' });
+  try {
+    await webpush.sendNotification(sub.subscription, JSON.stringify({
+      title: 'نور AI 🌙', body: 'تم تفعيل تنبيهات الصلاة بنجاح ✅', url: '/prayer', tag: 'noor-test',
+    }));
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: String(e?.message || e) });
+  }
+});
+
+// Scheduler: every minute, send a push when a subscriber's local prayer time arrives.
+if (pushEnabled) {
+  setInterval(async () => {
+    if (!pushSubs.size) return;
+    const nowUtc = Date.now();
+    for (const [ep, sub] of pushSubs) {
+      try {
+        const local = new Date(nowUtc + sub.tzOffset * 60000);
+        const cur = `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`;
+        const dayStr = `${local.getUTCFullYear()}-${local.getUTCMonth() + 1}-${local.getUTCDate()}`;
+        for (const [pk, ptime] of Object.entries(sub.prayers)) {
+          if (ptime === cur && sub.lastSent[pk] !== `${dayStr} ${cur}`) {
+            sub.lastSent[pk] = `${dayStr} ${cur}`;
+            await webpush.sendNotification(sub.subscription, JSON.stringify({
+              title: `حان وقت ${PRAYER_AR[pk] || pk} 🕌`,
+              body: 'حيّ على الصلاة — لا تفوّت أجرها 🤍',
+              url: '/prayer', tag: 'noor-prayer', requireInteraction: true,
+            })).catch((err: any) => {
+              if (err?.statusCode === 410 || err?.statusCode === 404) pushSubs.delete(ep);
+            });
+          }
+        }
+      } catch { /* ignore this subscriber this tick */ }
+    }
+  }, 60000);
+}
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
