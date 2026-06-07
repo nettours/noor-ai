@@ -3,8 +3,42 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight, Volume2, Pause, Play, CheckCircle2, XCircle,
-  BookOpen, GraduationCap, Award, ChevronLeft, RotateCcw
+  BookOpen, GraduationCap, Award, ChevronLeft, RotateCcw,
+  Youtube, Video, ExternalLink
 } from 'lucide-react';
+
+// ═══ دورة الفيديو المعتمدة: «التجويد المصوّر» — د. أيمن سويد ═══
+const VIDEO_COURSE = {
+  teacher: 'الدكتور أيمن رشدي سويد',
+  title: 'التجويد المصوّر',
+  playlist: 'PLCl3g1JqUQj_UThrxbqSKgcIBkTTiQ2d0',
+  intro: '9u6naFV6Uf0',
+  channel: 'https://www.youtube.com/@Dr.AymanSwaid',
+};
+
+// معرّفات فيديو مؤكَّدة لبعض الدروس (البقية تفتح بحثًا دقيقًا على يوتيوب)
+const LESSON_VIDEOS: Record<string, string> = {
+  istiadha: 'IhZmo-1Ys6M', // التعوّذ والبسملة — الحلقة 7
+};
+
+// ── مشغّل يوتيوب متجاوب (16:9) ──
+function YouTube({ id, list }: { id?: string; list?: string }) {
+  const src = list
+    ? `https://www.youtube-nocookie.com/embed/videoseries?list=${list}`
+    : `https://www.youtube-nocookie.com/embed/${id}`;
+  return (
+    <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', borderRadius: 16, overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <iframe
+        src={src}
+        title="شرح التجويد بالفيديو"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+        loading="lazy"
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+      />
+    </div>
+  );
+}
 
 // ═══════════════════════════════════════════════════════
 // منهج التجويد الشامل — مرتّب من الأساس للمتقدّم
@@ -188,6 +222,7 @@ export default function TajweedPage() {
   const router = useRouter();
   const [mode, setMode] = useState<'learn' | 'quiz'>('learn');
   const [openLesson, setOpenLesson] = useState<string | null>(null);
+  const [openVideo, setOpenVideo] = useState<string | null>(null);
   const [speaking, setSpeaking] = useState<string | null>(null);
   const [progress, setProgress] = useState<Record<string, boolean>>({});
 
@@ -278,8 +313,8 @@ export default function TajweedPage() {
             <ArrowRight size={20} />
           </button>
           <div style={{ flex: 1 }}>
-            <h1 style={{ fontSize: '20px', fontWeight: 900 }}>📖 تعلّم التجويد</h1>
-            <p style={{ fontSize: '11px', color: '#9CA3AF' }}>مع المدرّس الصوتي</p>
+            <h1 style={{ fontSize: '20px', fontWeight: 900 }}>📖 منصة تعلّم التجويد</h1>
+            <p style={{ fontSize: '11px', color: '#9CA3AF' }}>بالصوت والصورة — دروس + فيديو + اختبار</p>
           </div>
         </header>
 
@@ -313,6 +348,30 @@ export default function TajweedPage() {
             );
           })}
         </div>
+
+        {/* ═══ الدورة المرئية المميّزة ═══ */}
+        {mode === 'learn' && (
+          <div style={{
+            marginBottom: '28px', padding: '16px', borderRadius: '20px',
+            background: 'linear-gradient(160deg, rgba(239,68,68,0.10), rgba(217,119,6,0.06))',
+            border: '1px solid rgba(239,68,68,0.2)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <Youtube size={20} color="#F87171" />
+              <h2 style={{ fontSize: '15px', fontWeight: 800 }}>دورة «{VIDEO_COURSE.title}» بالفيديو</h2>
+            </div>
+            <p style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '12px' }}>
+              شرح كامل بالصوت والصورة — {VIDEO_COURSE.teacher}
+            </p>
+            <YouTube list={VIDEO_COURSE.playlist} />
+            <a href={VIDEO_COURSE.channel} target="_blank" rel="noopener noreferrer" style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '12px',
+              fontSize: '12px', fontWeight: 700, color: '#F87171', textDecoration: 'none',
+            }}>
+              <ExternalLink size={13} /> القناة الكاملة على يوتيوب
+            </a>
+          </div>
+        )}
 
         {/* ═══ وضع التعلّم ═══ */}
         {mode === 'learn' && CURRICULUM.map(unit => (
@@ -371,6 +430,41 @@ export default function TajweedPage() {
                         <p style={{ fontSize: '14px', lineHeight: 1.9, color: '#D1D5DB', marginBottom: '14px', direction: 'rtl' }}>
                           {lesson.explain}
                         </p>
+
+                        {/* شرح بالفيديو */}
+                        {(() => {
+                          const vid = LESSON_VIDEOS[lesson.id];
+                          const showVid = openVideo === lesson.id;
+                          if (vid) {
+                            return (
+                              <div style={{ marginBottom: '14px' }}>
+                                <button onClick={() => setOpenVideo(showVid ? null : lesson.id)} style={{
+                                  width: '100%', padding: '11px', borderRadius: '12px', marginBottom: showVid ? '12px' : 0,
+                                  background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
+                                  color: '#F87171', cursor: 'pointer', fontSize: '13px', fontWeight: 700,
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                                }}>
+                                  <Youtube size={16} /> {showVid ? 'إخفاء الفيديو' : 'شاهد شرحًا بالفيديو'}
+                                </button>
+                                {showVid && <YouTube id={vid} />}
+                              </div>
+                            );
+                          }
+                          return (
+                            <a
+                              href={`https://www.youtube.com/results?search_query=${encodeURIComponent('شرح ' + lesson.title + ' تجويد')}`}
+                              target="_blank" rel="noopener noreferrer"
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                                width: '100%', padding: '11px', borderRadius: '12px', marginBottom: '14px',
+                                background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.25)',
+                                color: '#F87171', textDecoration: 'none', fontSize: '13px', fontWeight: 700,
+                              }}
+                            >
+                              <Youtube size={16} /> شاهد شرح «{lesson.title}» على يوتيوب
+                            </a>
+                          );
+                        })()}
 
                         {/* الأمثلة */}
                         <div style={{ fontSize: '12px', fontWeight: 700, color: lesson.color, marginBottom: '8px' }}>أمثلة:</div>

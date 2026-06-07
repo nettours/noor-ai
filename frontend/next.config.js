@@ -33,7 +33,7 @@ const nextConfig = {
               "img-src 'self' data: https: blob:",
               "media-src 'self' data: blob: https:",
               "connect-src 'self' https: wss: ws:",
-              "frame-src 'self'",
+              "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
             ].join('; '),
           },
         ],
