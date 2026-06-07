@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { trackActivity } from '@/lib/track';
 import {
   Send, ArrowRight, Sparkles, Bot, User, Copy, Check,
   Volume2, Loader2, RotateCcw, BookOpen, Heart, Star,
@@ -99,6 +100,7 @@ export default function AIChatPage() {
   const sendMessage = async (text: string) => {
     const content = text.trim();
     if (!content || loading) return;
+    trackActivity('scholar');
 
     const userMsg: Message = {
       id: 'u_' + Date.now(),

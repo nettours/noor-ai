@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Sparkles, ChevronDown, Check } from 'lucide-react';
+import { trackActivity } from '@/lib/track';
 
 /**
  * درس اليوم — a daily authentic ayah + its tafsir, fetched live (same sources
@@ -70,6 +71,7 @@ export function DailyLesson() {
       localStorage.setItem('noor_pts', String(pts + 15));
       setStreak(next);
       setReadToday(true);
+      trackActivity('lesson');
     } catch {}
   };
 

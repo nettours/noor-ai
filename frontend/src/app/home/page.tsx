@@ -11,6 +11,7 @@ import { NextPrayerCard, StreakCard, DailyChallenges, HijriDate } from '@/compon
 import { SalahTracker } from '@/components/common/SalahTracker';
 import { PrayerNotifyButton } from '@/components/common/PrayerNotifyButton';
 import { DailyLesson } from '@/components/common/DailyLesson';
+import { HabitWall } from '@/components/common/HabitWall';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
 const PRAYER_API = 'https://api.aladhan.com/v1/timings';
@@ -161,8 +162,13 @@ export default function HomePage() {
         </div>
 
         {/* Gamification stats */}
-        <div style={{ marginBottom: '28px' }}>
+        <div style={{ marginBottom: '16px' }}>
           <StreakCard streak={stats.streak} points={stats.points} level={stats.level} />
+        </div>
+
+        {/* Live community habit wall (social proof) */}
+        <div style={{ marginBottom: '28px' }}>
+          <HabitWall />
         </div>
 
         <div style={{

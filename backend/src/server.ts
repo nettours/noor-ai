@@ -1566,6 +1566,47 @@ if (pushEnabled) {
   }, 60000);
 }
 
+// ═══════════════════════════════════════════════════════════════
+// LIVE HABIT WALL — anonymous community activity (social proof)
+// Real numbers: online now, total members, and today's action counts.
+// ═══════════════════════════════════════════════════════════════
+let activityDay = '';
+const activity: Record<string, number> = {};
+function activityKey(): string {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${d.getUTCMonth() + 1}-${d.getUTCDate()}`;
+}
+function rollActivityDay() {
+  const k = activityKey();
+  if (k !== activityDay) { activityDay = k; for (const key of Object.keys(activity)) delete activity[key]; }
+}
+function bumpActivity(action: string) {
+  rollActivityDay();
+  const a = (action || 'other').replace(/[^a-z]/gi, '').slice(0, 20) || 'other';
+  activity[a] = (activity[a] || 0) + 1;
+}
+
+app.post('/api/stats/track', (req: Request, res: Response): any => {
+  if (req.body?.action) bumpActivity(String(req.body.action));
+  res.json({ success: true });
+});
+
+app.get('/api/stats/live', (_req: Request, res: Response) => {
+  rollActivityDay();
+  res.json({
+    success: true,
+    online: onlineUsers.size,
+    totalUsers: users.size,
+    today: {
+      salah: activity.salah || 0,
+      lesson: activity.lesson || 0,
+      scholar: activity.scholar || 0,
+      dhikr: activity.dhikr || 0,
+      quran: activity.quran || 0,
+    },
+  });
+});
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: '*', methods: ['GET', 'POST'], credentials: true },

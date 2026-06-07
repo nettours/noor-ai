@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { trackActivity } from '@/lib/track';
 
 /**
  * رحلة نور — Salah streak + "مصباح نور" habit loop.
@@ -60,7 +61,7 @@ export function SalahTracker() {
     const key = dayKey();
     const set = new Set(log[key] || []);
     const wasOn = set.has(k);
-    if (wasOn) set.delete(k); else set.add(k);
+    if (wasOn) set.delete(k); else { set.add(k); trackActivity('salah'); }
     log[key] = Array.from(set);
     localStorage.setItem(LOG_KEY, JSON.stringify(log));
 
