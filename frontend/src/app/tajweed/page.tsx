@@ -16,9 +16,24 @@ const VIDEO_COURSE = {
   channel: 'https://www.youtube.com/@Dr.AymanSwaid',
 };
 
-// معرّفات فيديو مؤكَّدة لبعض الدروس (البقية تفتح بحثًا دقيقًا على يوتيوب)
+// معرّفات فيديو حقيقية لكل درس (القلقلة/الغُنّة تفتحان بحثًا دقيقًا على يوتيوب)
 const LESSON_VIDEOS: Record<string, string> = {
-  istiadha: 'IhZmo-1Ys6M', // التعوّذ والبسملة — الحلقة 7
+  istiadha: 'IhZmo-1Ys6M',        // التعوّذ والبسملة — أيمن سويد
+  makharij: 'cV828kKqjKw',        // مخارج الحروف في فيديو واحد
+  idhhar: 'Uy0uhfUdhLA',          // أحكام النون الساكنة (شامل)
+  idgham: 'Uy0uhfUdhLA',
+  iqlab: 'Uy0uhfUdhLA',
+  ikhfa: 'Uy0uhfUdhLA',
+  ikhfa_shafawi: 'S-vH7vNnhiE',   // أحكام الميم الساكنة (شامل)
+  idgham_shafawi: 'S-vH7vNnhiE',
+  idhhar_shafawi: 'S-vH7vNnhiE',
+  madd_tabii: 'NMEopSYK9Ik',      // كل أحكام المدود
+  madd_muttasil: 'NMEopSYK9Ik',
+  madd_munfasil: 'NMEopSYK9Ik',
+  madd_lazim: 'NMEopSYK9Ik',
+  qalqala: 'SSvDiIwIjXc',         // حروف القلقلة شرح مبسط
+  ghunna: 'I3-IOD49WgE',          // الغُنّة — أيمن سويد (الحلقة 16)
+  lam: 'LdJXKmfo3q0',             // اللام الشمسية والقمرية
 };
 
 // ── مشغّل يوتيوب متجاوب (16:9) ──
@@ -232,10 +247,29 @@ export default function TajweedPage() {
   const [score, setScore] = useState(0);
   const [quizDone, setQuizDone] = useState(false);
 
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+  const [voiceMissing, setVoiceMissing] = useState(false);
+
   useEffect(() => {
     try { setProgress(JSON.parse(localStorage.getItem('noor_tajweed') || '{}')); } catch {}
+
+    // Pre-load TTS voices (first call is often silent until voices populate).
+    const synth = window.speechSynthesis;
+    if (synth) {
+      const load = () => {
+        voicesRef.current = synth.getVoices();
+        setVoiceMissing(voicesRef.current.length > 0 && !pickArabicVoice());
+      };
+      load();
+      synth.addEventListener?.('voiceschanged', load);
+      return () => { synth.removeEventListener?.('voiceschanged', load); synth.cancel(); };
+    }
     return () => { window.speechSynthesis?.cancel(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const pickArabicVoice = (): SpeechSynthesisVoice | null =>
+    voicesRef.current.find(v => /^ar/i.test(v.lang)) || null;
 
   const markDone = (id: string) => {
     setProgress(prev => {
@@ -264,6 +298,8 @@ export default function TajweedPage() {
       const speakNext = () => {
         if (i >= parts.length) { setSpeaking(null); markDone(lesson.id); return; }
         const u = new SpeechSynthesisUtterance(parts[i]);
+        const v = pickArabicVoice();
+        if (v) u.voice = v;
         u.lang = 'ar-SA'; u.rate = 0.8;
         u.onend = () => { i++; speakNext(); };
         u.onerror = () => { i++; speakNext(); };
@@ -280,6 +316,8 @@ export default function TajweedPage() {
     synth.cancel();
     setTimeout(() => {
       const u = new SpeechSynthesisUtterance(text);
+      const v = pickArabicVoice();
+      if (v) u.voice = v;
       u.lang = 'ar-SA'; u.rate = 0.7;
       synth.speak(u);
     }, 100);
@@ -425,6 +463,11 @@ export default function TajweedPage() {
                           {isSpeaking ? <Pause size={16} /> : <Volume2 size={16} />}
                           {isSpeaking ? 'المدرّس يشرح... (اضغط للإيقاف)' : '🎙️ اشرح لي هذا الدرس'}
                         </button>
+                        {voiceMissing && (
+                          <p style={{ fontSize: '11px', color: '#FBBF24', textAlign: 'center', marginTop: '-8px', marginBottom: '14px', lineHeight: 1.6 }}>
+                            ⚠️ متصفحك لا يحتوي صوتًا عربيًا للنطق الآلي — شاهد الشرح بالفيديو أدناه 👇
+                          </p>
+                        )}
 
                         {/* الشرح */}
                         <p style={{ fontSize: '14px', lineHeight: 1.9, color: '#D1D5DB', marginBottom: '14px', direction: 'rtl' }}>
