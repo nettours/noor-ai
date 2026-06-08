@@ -72,7 +72,9 @@ async function connectDB() {
     return;
   }
   try {
-    const client = new MongoClient(uri);
+    // serverSelectionTimeoutMS: fail fast (5s) instead of hanging the whole
+    // startup if the DB host is unreachable — the healthcheck can't wait.
+    const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000 });
     await client.connect();
     db = client.db('noor');
     dbReady = true;
@@ -1894,25 +1896,30 @@ process.on('SIGTERM', async () => {
 });
 
 async function startServer() {
-  // 1) اتصل بالقاعدة وحمّل البيانات الدائمة
-  await connectDB();
-  await loadFromDB();
-
-  // 2) حفظ دوري للرسائل كل 15 ثانية
-  if (dbReady) {
-    setInterval(() => { persistMessages().catch(() => {}); }, 15000);
-  }
-
-  // 3) ابدأ الخادم
+  // 1) ابدأ الاستماع فوراً حتى ينجح الـ healthcheck بصرف النظر عن حالة القاعدة.
+  //    (الـ healthcheck يفشل إذا انتظرنا اتصال القاعدة قبل listen.)
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log('═══════════════════════════════════════');
     console.log('🌙 Noor AI on port', PORT);
-    console.log('💾 Database:', dbReady ? '✅ MongoDB (دائم)' : '⚠️ ذاكرة فقط');
     console.log('🧠 Gemini Key:', process.env.GEMINI_API_KEY ? '✅ SET' : '❌ NOT SET');
     console.log('═══════════════════════════════════════');
     // Preload the Scholar hadith knowledge base in the background.
     void ensureHadithKB();
   });
+
+  // 2) اتصل بالقاعدة وحمّل البيانات الدائمة في الخلفية (لا تحبس الإقلاع).
+  try {
+    await connectDB();
+    await loadFromDB();
+    console.log('💾 Database:', dbReady ? '✅ MongoDB (دائم)' : '⚠️ ذاكرة فقط');
+
+    // 3) حفظ دوري للرسائل كل 15 ثانية (فقط إذا القاعدة جاهزة)
+    if (dbReady) {
+      setInterval(() => { persistMessages().catch(() => {}); }, 15000);
+    }
+  } catch (err) {
+    console.error('🔥 فشل تهيئة القاعدة (نكمل بالذاكرة فقط):', err);
+  }
 }
 
 // حفظ عند الإغلاق مُدمج في معالج SIGTERM أعلاه
