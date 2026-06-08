@@ -519,10 +519,15 @@ function adminAuth(req: any, res: Response, next: any) {
   } catch { res.status(401).json({ success: false, error: 'غير مصرّح' }); }
 }
 
+// Server boot time — lets us verify which deployment is live (a fresh deploy
+// resets this to "now"), and exposes DB connectivity for quick diagnostics.
+const BOOT_TIME = new Date().toISOString();
 app.get('/health', (_req, res) => res.json({
   status: 'ok', users: users.size, online: onlineUsers.size,
   rooms: rooms.size, version: 'AI-POWERED-BOTS',
   hasAIKey: !!process.env.GEMINI_API_KEY,
+  db: dbReady ? 'connected' : 'memory-only',
+  startedAt: BOOT_TIME,
 }));
 
 app.get('/', (_req, res) => res.json({ message: '🌙 Noor AI - Intelligent Backend', bots: FAKE_USERS.length, rooms: rooms.size }));
