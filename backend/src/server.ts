@@ -1491,10 +1491,17 @@ app.post('/api/ai/chat', auth, async (req: any, res: Response) => {
 const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:contact@snetprodz.com';
-const pushEnabled = !!(VAPID_PUBLIC && VAPID_PRIVATE);
+let pushEnabled = !!(VAPID_PUBLIC && VAPID_PRIVATE);
 if (pushEnabled) {
-  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
-  console.log('🔔 Web Push: ✅ enabled');
+  // setVapidDetails يرمي خطأً إن كانت المفاتيح غير صالحة — نلفّه بـ try/catch
+  // حتى لا يقتل العملية عند الإقلاع (وإلا يفشل الـ healthcheck).
+  try {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+    console.log('🔔 Web Push: ✅ enabled');
+  } catch (e) {
+    pushEnabled = false;
+    console.error('🔔 Web Push: ❌ معطّل — مفاتيح VAPID غير صالحة:', (e as Error)?.message || e);
+  }
 } else {
   console.log('🔔 Web Push: ❌ disabled (set VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY)');
 }
