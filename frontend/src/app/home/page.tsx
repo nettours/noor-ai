@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   BookOpen, Bot, Clock, Compass, Heart, Users, Sparkles,
-  MessageCircle, Star, ChevronLeft, LogOut, Volume2, Pause, GraduationCap
+  MessageCircle, Star, ChevronLeft, LogOut, Volume2, Pause, GraduationCap, Moon
 } from 'lucide-react';
 import { useI18n } from '@/components/ui/I18nProvider';
 import { NextPrayerCard, StreakCard, DailyChallenges, HijriDate } from '@/components/common';
@@ -123,6 +123,7 @@ export default function HomePage() {
     { href: '/stories', icon: Star, title: t('home.feature.stories'), color: '#FB923C' },
     { href: '/qibla', icon: Compass, title: t('home.feature.qibla'), color: '#FBBF24' },
     { href: '/dua', icon: Heart, title: 'بطاقة دعاء', color: '#EC4899' },
+    { href: '/dreams', icon: Moon, title: 'تفسير الأحلام', color: '#A855F7' },
   ];
 
   const dailyText = tab === 'verse' ? daily?.verse?.text : tab === 'hadith' ? daily?.hadith?.text : daily?.wisdom?.text;
