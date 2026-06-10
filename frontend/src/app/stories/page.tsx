@@ -9,6 +9,8 @@ import {
 // ═══════════════════════════════════════════════════════════════
 // قصص الأنبياء — تفصيلية + روابط YouTube (نبيل العوضي)
 // ═══════════════════════════════════════════════════════════════
+// قائمة التشغيل الكاملة: «نبيل العوضي [قصص الأنبياء] كاملة» (متحقَّقة عبر oEmbed)
+const SERIES_PLAYLIST = 'PLE77E8C2333AABE77';
 const PROPHETS = [
   {
     id: 'adam',
@@ -290,6 +292,7 @@ export default function StoriesPage() {
   const [selected, setSelected] = useState<typeof PROPHETS[0] | null>(null);
   const [playing, setPlaying] = useState(false);
   const [showYoutube, setShowYoutube] = useState(false);
+  const [showPlaylist, setShowPlaylist] = useState(false);
 
   useEffect(() => {
     try {
@@ -640,6 +643,48 @@ export default function StoriesPage() {
             />
           </div>
         </header>
+
+        {/* ═══ السلسلة الكاملة بالفيديو (قائمة تشغيل نبيل العوضي) ═══ */}
+        <div style={{
+          marginBottom: '20px', padding: '16px', borderRadius: '20px',
+          background: 'linear-gradient(160deg, rgba(255,0,0,0.10), rgba(217,119,6,0.06))',
+          border: '1px solid rgba(255,0,0,0.2)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <Youtube size={20} color="#FF4444" />
+            <h2 style={{ fontSize: '15px', fontWeight: 800 }}>السلسلة الكاملة بالفيديو</h2>
+          </div>
+          <p style={{ fontSize: '12px', color: '#9CA3AF', marginBottom: '12px' }}>
+            قصص الأنبياء كاملة — الشيخ نبيل العوضي
+          </p>
+          {showPlaylist ? (
+            <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', borderRadius: 14, overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/videoseries?list=${SERIES_PLAYLIST}`}
+                title="قصص الأنبياء — نبيل العوضي"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                loading="lazy"
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+              />
+            </div>
+          ) : (
+            <button onClick={() => setShowPlaylist(true)} style={{
+              width: '100%', padding: '12px', borderRadius: '12px',
+              background: 'rgba(255,0,0,0.12)', border: '1px solid rgba(255,0,0,0.3)',
+              color: '#FF6B6B', cursor: 'pointer', fontSize: '13px', fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+            }}>
+              <Play size={15} fill="#FF6B6B" /> شاهد السلسلة الكاملة
+            </button>
+          )}
+          <a href={`https://www.youtube.com/playlist?list=${SERIES_PLAYLIST}`} target="_blank" rel="noopener noreferrer" style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '12px',
+            fontSize: '12px', fontWeight: 700, color: '#FF6B6B', textDecoration: 'none',
+          }}>
+            <ExternalLink size={13} /> فتح القائمة على يوتيوب
+          </a>
+        </div>
 
         <div style={{
           display: 'grid',
