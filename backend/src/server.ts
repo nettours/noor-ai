@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { MongoClient } from 'mongodb';
 import webpush from 'web-push';
+import { registerDreamRoutes, initDreams, seedDreamsInMemory } from './dreams';
 
 interface User {
   id: string; name: string; email: string;
@@ -533,6 +534,9 @@ app.get('/health', (_req, res) => res.json({
 app.get('/', (_req, res) => res.json({ message: '🌙 Noor AI - Intelligent Backend', bots: FAKE_USERS.length, rooms: rooms.size }));
 
 app.get('/api/daily', (_req, res) => res.json({ success: true, ...getTodayContent() }));
+
+// ═══ موسوعة تفسير الأحلام — تسجيل مسارات /api/dreams/* ═══
+registerDreamRoutes(app, { auth, adminAuth, getDb: () => db, isDbReady: () => dbReady });
 
 // ═══════════════════════════════════════════════════════
 // 📋 LIST MODELS - يعرض النماذج المتاحة لمفتاحك
@@ -1927,10 +1931,14 @@ async function startServer() {
 
     // 3) حفظ دوري للرسائل كل 15 ثانية (فقط إذا القاعدة جاهزة)
     if (dbReady) {
+      await initDreams(db);                         // موسوعة الأحلام: تحميل/بذر
       setInterval(() => { persistMessages().catch(() => {}); }, 15000);
+    } else {
+      seedDreamsInMemory();                          // بلا قاعدة: بذر بالذاكرة
     }
   } catch (err) {
     console.error('🔥 فشل تهيئة القاعدة (نكمل بالذاكرة فقط):', err);
+    seedDreamsInMemory();
   }
 }
 
