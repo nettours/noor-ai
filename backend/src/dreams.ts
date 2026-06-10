@@ -79,24 +79,21 @@ async function persistFavorites(userId: string) {
 
 // ═══ التهيئة: تحميل من القاعدة أو بذر القيم الأولية ═══
 export async function initDreams(db: any) {
-  // المصادر
+  // المصادر: حمّل من القاعدة ثم ادمج أي مصدرٍ جديدٍ من البذرة (لا يلمس المُحرّر يدوياً)
   try {
     const dbSources = await db.collection('dream_sources').find({}).toArray();
-    if (dbSources.length) {
-      for (const s of dbSources) { const { _id, ...src } = s; sources.set(src.id, src); }
-    } else {
-      for (const s of DREAM_SOURCES) { sources.set(s.id, s); await persistSource(s); }
-    }
+    for (const s of dbSources) { const { _id, ...src } = s; sources.set(src.id, src); }
+    for (const s of DREAM_SOURCES) { if (!sources.has(s.id)) { sources.set(s.id, s); await persistSource(s); } }
   } catch (e) { console.error('initDreams sources:', e); for (const s of DREAM_SOURCES) sources.set(s.id, s); }
 
-  // الرموز
+  // الرموز: حمّل من القاعدة ثم ادمج الرموز الجديدة من ملف البذرة التي ليست في القاعدة.
+  // هكذا تظهر الرموز المُضافة لاحقاً تلقائياً عند إعادة النشر، مع الحفاظ على تعديلات الأدمن للموجودة.
   try {
     const dbSymbols = await db.collection('dream_symbols').find({}).toArray();
-    if (dbSymbols.length) {
-      for (const s of dbSymbols) { const { _id, ...sym } = s; symbols.set(sym.id, sym); }
-    } else {
-      for (const s of DREAM_SYMBOLS) { symbols.set(s.id, s); await persistSymbol(s); }
-    }
+    for (const s of dbSymbols) { const { _id, ...sym } = s; symbols.set(sym.id, sym); }
+    let added = 0;
+    for (const s of DREAM_SYMBOLS) { if (!symbols.has(s.id)) { symbols.set(s.id, s); await persistSymbol(s); added++; } }
+    if (added) console.log(`💤 Dreams: أُضيف ${added} رمزاً جديداً من البذرة`);
   } catch (e) { console.error('initDreams symbols:', e); for (const s of DREAM_SYMBOLS) symbols.set(s.id, s); }
 
   // سجلات المستخدمين + المفضّلة
