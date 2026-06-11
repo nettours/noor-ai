@@ -8,6 +8,10 @@ import {
   DREAM_SYMBOLS, DREAM_SOURCES, DREAM_CATEGORIES,
   type DreamSymbol, type DreamSource, type DreamCategory,
 } from './dreams-data';
+import { IBN_SIRIN_SYMBOLS } from './dreams-ibnsirin.generated';
+
+// كل رموز البذرة: المنسّقة يدوياً + المستخرَجة من كتاب ابن سيرين (ملك عام)
+const ALL_SEED_SYMBOLS: DreamSymbol[] = [...DREAM_SYMBOLS, ...IBN_SIRIN_SYMBOLS];
 
 // ── أنواع خاصة بالـ runtime ──
 interface DreamLog {
@@ -92,9 +96,9 @@ export async function initDreams(db: any) {
     const dbSymbols = await db.collection('dream_symbols').find({}).toArray();
     for (const s of dbSymbols) { const { _id, ...sym } = s; symbols.set(sym.id, sym); }
     let added = 0;
-    for (const s of DREAM_SYMBOLS) { if (!symbols.has(s.id)) { symbols.set(s.id, s); await persistSymbol(s); added++; } }
+    for (const s of ALL_SEED_SYMBOLS) { if (!symbols.has(s.id)) { symbols.set(s.id, s); await persistSymbol(s); added++; } }
     if (added) console.log(`💤 Dreams: أُضيف ${added} رمزاً جديداً من البذرة`);
-  } catch (e) { console.error('initDreams symbols:', e); for (const s of DREAM_SYMBOLS) symbols.set(s.id, s); }
+  } catch (e) { console.error('initDreams symbols:', e); for (const s of ALL_SEED_SYMBOLS) symbols.set(s.id, s); }
 
   // سجلات المستخدمين + المفضّلة
   try {
@@ -109,7 +113,7 @@ export async function initDreams(db: any) {
 
 // إن لم تتوفّر قاعدة بيانات: ابذر القيم في الذاكرة فقط حتى يعمل القسم.
 export function seedDreamsInMemory() {
-  if (symbols.size === 0) for (const s of DREAM_SYMBOLS) symbols.set(s.id, s);
+  if (symbols.size === 0) for (const s of ALL_SEED_SYMBOLS) symbols.set(s.id, s);
   if (sources.size === 0) for (const s of DREAM_SOURCES) sources.set(s.id, s);
   console.log(`💤 Dreams KB (ذاكرة فقط): ${symbols.size} رمز`);
 }
