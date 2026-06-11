@@ -8,7 +8,7 @@
     "start": "node dist/server.js",
     "dev": "tsx src/server.ts",
     "import:dreams": "tsx scripts/import-dreams.ts",
-    "parse:ibnsirin": "tsx scripts/parse-ibnsirin.ts"
+    "parse:books": "tsx scripts/parse-books.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

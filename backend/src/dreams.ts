@@ -8,10 +8,10 @@ import {
   DREAM_SYMBOLS, DREAM_SOURCES, DREAM_CATEGORIES,
   type DreamSymbol, type DreamSource, type DreamCategory,
 } from './dreams-data';
-import { IBN_SIRIN_SYMBOLS } from './dreams-ibnsirin.generated';
+import { CLASSICAL_SYMBOLS } from './dreams-classical.generated';
 
-// كل رموز البذرة: المنسّقة يدوياً + المستخرَجة من كتاب ابن سيرين (ملك عام)
-const ALL_SEED_SYMBOLS: DreamSymbol[] = [...DREAM_SYMBOLS, ...IBN_SIRIN_SYMBOLS];
+// كل رموز البذرة: المنسّقة يدوياً + المستخرَجة من كتب التراث (ابن سيرين + ابن قتيبة، ملك عام)
+const ALL_SEED_SYMBOLS: DreamSymbol[] = [...DREAM_SYMBOLS, ...CLASSICAL_SYMBOLS];
 
 // ── أنواع خاصة بالـ runtime ──
 interface DreamLog {
