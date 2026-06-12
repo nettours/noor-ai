@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import { MongoClient } from 'mongodb';
 import webpush from 'web-push';
 import { registerDreamRoutes, initDreams, seedDreamsInMemory } from './dreams';
+import { registerHadithRoutes, initHadith, seedHadithInMemory } from './hadith';
 
 interface User {
   id: string; name: string; email: string;
@@ -537,6 +538,9 @@ app.get('/api/daily', (_req, res) => res.json({ success: true, ...getTodayConten
 
 // ═══ موسوعة تفسير الأحلام — تسجيل مسارات /api/dreams/* ═══
 registerDreamRoutes(app, { auth, adminAuth, getDb: () => db, isDbReady: () => dbReady });
+
+// ═══ أكاديمية علم الحديث — تسجيل مسارات /api/hadith/* ═══
+registerHadithRoutes(app, { auth, adminAuth, getDb: () => db, isDbReady: () => dbReady });
 
 // ═══════════════════════════════════════════════════════
 // 📋 LIST MODELS - يعرض النماذج المتاحة لمفتاحك
@@ -1932,13 +1936,16 @@ async function startServer() {
     // 3) حفظ دوري للرسائل كل 15 ثانية (فقط إذا القاعدة جاهزة)
     if (dbReady) {
       await initDreams(db);                         // موسوعة الأحلام: تحميل/بذر
+      await initHadith(db);                          // أكاديمية الحديث: تحميل/بذر
       setInterval(() => { persistMessages().catch(() => {}); }, 15000);
     } else {
       seedDreamsInMemory();                          // بلا قاعدة: بذر بالذاكرة
+      seedHadithInMemory();
     }
   } catch (err) {
     console.error('🔥 فشل تهيئة القاعدة (نكمل بالذاكرة فقط):', err);
     seedDreamsInMemory();
+    seedHadithInMemory();
   }
 }
 
