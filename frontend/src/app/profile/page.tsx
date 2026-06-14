@@ -53,6 +53,18 @@ export default function SettingsPage() {
     router.push('/');
   };
 
+  const rateApp = async () => {
+    const url = typeof window !== 'undefined' ? window.location.origin : 'https://noor-ai-v1.vercel.app';
+    try {
+      if (typeof navigator !== 'undefined' && (navigator as any).share) {
+        await (navigator as any).share({ title: 'نور AI 🌙', text: 'جرّب تطبيق نور AI الإسلامي', url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        alert('تم نسخ رابط التطبيق — شاركه مع أصدقائك وادعمنا 🌙');
+      }
+    } catch {}
+  };
+
   if (!me) {
     return (
       <div style={{ minHeight: '100dvh', background: '#030712', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -127,9 +139,10 @@ export default function SettingsPage() {
 
         {/* ═══ روابط ═══ */}
         <Section icon={<Info size={18} />} title={t('settings.about')} color="#34D399">
-          <LinkRow icon={<Shield size={18} />} label="الخصوصية والأمان" onClick={() => {}} />
-          <LinkRow icon={<Heart size={18} />} label="قيّم التطبيق" onClick={() => {}} />
-          <LinkRow icon={<Info size={18} />} label="نور AI — الإصدار 1.0" onClick={() => {}} />
+          <LinkRow icon={<Shield size={18} />} label="الخصوصية والأمان" onClick={() => router.push('/privacy')} />
+          <LinkRow icon={<Info size={18} />} label="الشروط والأحكام" onClick={() => router.push('/terms')} />
+          <LinkRow icon={<Heart size={18} />} label="قيّم التطبيق وشاركه" onClick={rateApp} />
+          <LinkRow icon={<Info size={18} />} label="عن نور AI — الإصدار 1.0" onClick={() => router.push('/about')} />
         </Section>
 
         {/* تسجيل الخروج */}
