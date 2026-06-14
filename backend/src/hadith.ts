@@ -5,14 +5,26 @@
 // الأحاديث تُبذَر من ملف مُولّد (مستورَد من الموسوعة الحديثية HadeethEnc) ومن Mongo.
 // ═══════════════════════════════════════════════════════════════
 import type { Express, Request, Response } from 'express';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
   HADITH_GRADES, HADITH_BOOKS, HADITH_TERMS, HADITH_CATEGORIES,
   type Hadith,
 } from './hadith-data';
 
-// الأحاديث المُولّدة (قد يكون الملف فارغاً قبل أوّل استيراد)
+// الأحاديث المُولّدة تُحمَّل من JSON وقت التشغيل (لا عبر import) حتى لا يُبطئ
+// ملفُها الضخم (≈12MB) عمليةَ tsc في البناء. نجرّب عدّة مسارات محتملة.
 let SEED_HADEETHS: Hadith[] = [];
-try { SEED_HADEETHS = require('./hadith-hadeeths.generated').HADEETH_HADEETHS || []; } catch { /* لم يُولَّد بعد */ }
+{
+  const candidates = [
+    join(__dirname, 'hadith-hadeeths.generated.json'),
+    join(__dirname, '..', 'src', 'hadith-hadeeths.generated.json'),
+    join(process.cwd(), 'src', 'hadith-hadeeths.generated.json'),
+  ];
+  for (const p of candidates) {
+    try { SEED_HADEETHS = JSON.parse(readFileSync(p, 'utf8')); break; } catch { /* جرّب التالي */ }
+  }
+}
 
 interface Deps {
   auth: (req: any, res: Response, next: any) => void;
@@ -50,9 +62,13 @@ export async function initHadith(db: any) {
   try {
     const dbH = await db.collection('hadiths').find({}).toArray();
     for (const h of dbH) { const { _id, ...x } = h; hadiths.set(x.id, x as Hadith); }
-    let added = 0;
-    for (const h of SEED_HADEETHS) { if (!hadiths.has(h.id)) { hadiths.set(h.id, h); await persistHadith(h); added++; } }
-    if (added) console.log(`📜 Hadith: أُضيف ${added} حديثاً من البذرة`);
+    // بذر الأحاديث الناقصة دفعةً واحدة (insertMany) بدل آلاف العمليات المتتابعة
+    const missing = SEED_HADEETHS.filter(h => !hadiths.has(h.id));
+    for (const h of missing) hadiths.set(h.id, h);
+    if (missing.length) {
+      try { await db.collection('hadiths').insertMany(missing, { ordered: false }); console.log(`📜 Hadith: بُذِر ${missing.length} حديثاً`); }
+      catch (e) { console.error('seed hadiths insertMany:', e); }
+    }
     const dbC = await db.collection('hadith_collections').find({}).toArray();
     for (const c of dbC) collections.set(c.userId, new Set(c.ids || []));
   } catch (e) { console.error('initHadith:', e); for (const h of SEED_HADEETHS) hadiths.set(h.id, h); }

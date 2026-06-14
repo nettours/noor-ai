@@ -49,7 +49,7 @@ async function pool<T, R>(items: T[], limit: number, fn: (x: T) => Promise<R>): 
 
 async function listIds(encId: number): Promise<string[]> {
   const ids: string[] = [];
-  for (let page = 1; page <= 40 && ids.length < PER_CAT; page++) {
+  for (let page = 1; page <= 250 && ids.length < PER_CAT; page++) {
     const r = await j(`${API}/hadeeths/list/?language=${LANG}&category_id=${encId}&page=${page}&per_page=30`).catch(() => null);
     const data = r?.data || [];
     if (!data.length) break;
@@ -99,12 +99,8 @@ async function main() {
   const byGrade = all.reduce((m: any, h: any) => { m[h.gradeKey] = (m[h.gradeKey] || 0) + 1; return m; }, {});
   console.log(`✅ الإجمالي: ${total} حديثاً | الأحكام:`, byGrade);
 
-  const header = `// ⚠️ ملف مُولّد آلياً — لا تُعدّله يدوياً. أعد توليده بـ: npx tsx scripts/parse-hadeethenc.ts
-// المصدر: الموسوعة الحديثية HadeethEnc.com (API عام). كل حديث بنصّه وتخريجه وحكمه وشرحه.
-import type { Hadith } from './hadith-data';
-export const HADEETH_HADEETHS: Hadith[] = ${JSON.stringify(all, null, 0)};
-`;
-  writeFileSync(join(__dirname, '..', 'src', 'hadith-hadeeths.generated.ts'), header, 'utf8');
-  console.log('✅ كُتب: src/hadith-hadeeths.generated.ts');
+  // يُكتب JSON (لا TS) ليُحمّل وقت التشغيل بـ fs دون أن يُبطئ tsc على ملف ضخم.
+  writeFileSync(join(__dirname, '..', 'src', 'hadith-hadeeths.generated.json'), JSON.stringify(all), 'utf8');
+  console.log('✅ كُتب: src/hadith-hadeeths.generated.json');
 }
 main().catch(e => { console.error('🔥', e); process.exit(1); });
