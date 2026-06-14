@@ -502,8 +502,16 @@ function optionalAuth(req: any, _res: Response, next: any) {
   next();
 }
 
-// ═══ حماية الأدمن: يتحقّق أن المستخدم هو ADMIN_EMAIL ═══
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+// ═══ حماية الأدمن: بريد المستخدم ضمن قائمة المدراء ═══
+// المصادر: ADMIN_EMAIL + ADMIN_EMAILS (مفصولة بفواصل) + بُرُد مالك الموقع المدمجة.
+const ADMIN_EMAILS = new Set(
+  [process.env.ADMIN_EMAIL, ...((process.env.ADMIN_EMAILS || '').split(',')),
+   'sakhi.abderrahmen@outlook.fr', 'sakhi.abderrahmen027@gmail.com']
+    .map(e => (e || '').toLowerCase().trim()).filter(Boolean)
+);
+function isAdminEmail(email?: string): boolean {
+  return !!email && ADMIN_EMAILS.has(email.toLowerCase().trim());
+}
 function adminAuth(req: any, res: Response, next: any) {
   const token = req.headers.authorization?.replace('Bearer ', '');
   if (!token) { res.status(401).json({ success: false, error: 'غير مصرّح' }); return; }
@@ -511,8 +519,7 @@ function adminAuth(req: any, res: Response, next: any) {
     const decoded: any = jwt.verify(token, JWT_SECRET);
     const user = users.get(decoded.userId);
     if (!user) { res.status(401).json({ success: false, error: 'غير مصرّح' }); return; }
-    if (!ADMIN_EMAIL) { res.status(403).json({ success: false, error: 'لوحة الأدمن غير مُفعّلة (اضبط ADMIN_EMAIL)' }); return; }
-    if (user.email?.toLowerCase() !== ADMIN_EMAIL) {
+    if (!isAdminEmail(user.email)) {
       res.status(403).json({ success: false, error: 'هذه اللوحة للمدير فقط' });
       return;
     }
@@ -1122,7 +1129,7 @@ app.get('/api/feed/:id', optionalAuth, (req: any, res: Response): any => {
 // هل المستخدم الحالي أدمن؟ (للـ frontend ليعرف هل يعرض الزر)
 app.get('/api/admin/check', auth, (req: any, res: Response) => {
   const user = users.get(req.userId);
-  const isAdmin = !!ADMIN_EMAIL && user?.email?.toLowerCase() === ADMIN_EMAIL;
+  const isAdmin = isAdminEmail(user?.email);
   res.json({ success: true, isAdmin });
 });
 
@@ -1168,7 +1175,7 @@ app.get('/api/admin/users', adminAuth, (_req: any, res: Response) => {
 app.delete('/api/admin/users/:id', adminAuth, (req: any, res: Response): any => {
   const target = users.get(req.params.id);
   if (!target || target.isBot) return res.status(404).json({ success: false });
-  if (target.email?.toLowerCase() === ADMIN_EMAIL) return res.status(400).json({ success: false, error: 'لا يمكن حذف الأدمن' });
+  if (isAdminEmail(target.email)) return res.status(400).json({ success: false, error: 'لا يمكن حذف الأدمن' });
   users.delete(req.params.id);
   if (target.email) usersByEmail.delete(target.email.toLowerCase());
   onlineUsers.delete(req.params.id);

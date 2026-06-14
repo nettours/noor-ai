@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight, Users, FileText, Home, Radio, Trash2,
-  Loader2, TrendingUp, UserCheck, MessageSquare, Phone, Send, ShieldAlert
+  Loader2, TrendingUp, UserCheck, MessageSquare, Phone, Send, ShieldAlert,
+  ScrollText, Moon, Database, Activity, Search, ExternalLink, Layers, CheckCircle2, XCircle
 } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
+const BASE = API.replace(/\/api$/, '');
 
-type Tab = 'stats' | 'users' | 'posts' | 'rooms' | 'broadcast';
+type Tab = 'stats' | 'users' | 'posts' | 'rooms' | 'broadcast' | 'sections' | 'system';
 
 export default function AdminPage() {
   const router = useRouter();
@@ -22,8 +24,40 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [broadcastMsg, setBroadcastMsg] = useState('');
   const [sending, setSending] = useState(false);
+  // مركز التحكّم الشامل
+  const [dreamsMeta, setDreamsMeta] = useState<any>(null);
+  const [hadithMeta, setHadithMeta] = useState<any>(null);
+  const [health, setHealth] = useState<any>(null);
+  const [hQuery, setHQuery] = useState('');
+  const [hResults, setHResults] = useState<any[]>([]);
+  const [hSearching, setHSearching] = useState(false);
 
   const authHeaders = (token: string) => ({ Authorization: 'Bearer ' + token });
+
+  // بيانات عامّة عن الأقسام والنظام (للنظرة الشاملة)
+  useEffect(() => {
+    Promise.all([
+      fetch(API + '/dreams/meta').then(r => r.json()).catch(() => null),
+      fetch(API + '/hadith/meta').then(r => r.json()).catch(() => null),
+      fetch(BASE + '/health').then(r => r.json()).catch(() => null),
+    ]).then(([d, h, hl]) => { setDreamsMeta(d); setHadithMeta(h); setHealth(hl); });
+  }, []);
+
+  const searchHadith = async (q: string) => {
+    setHQuery(q);
+    if (!q.trim()) { setHResults([]); return; }
+    setHSearching(true);
+    try {
+      const d = await (await fetch(API + '/hadith/hadiths?per=20&q=' + encodeURIComponent(q))).json();
+      if (d.success) setHResults(d.hadiths);
+    } catch {}
+    setHSearching(false);
+  };
+  const deleteHadith = async (id: string) => {
+    if (!confirm('حذف هذا الحديث من القاعدة؟')) return;
+    setHResults(prev => prev.filter(h => h.id !== id));
+    try { await fetch(API + '/hadith/hadiths/' + id, { method: 'DELETE', headers: authHeaders(me.token) }); } catch {}
+  };
 
   useEffect(() => {
     try {
@@ -128,6 +162,8 @@ export default function AdminPage() {
     { label: 'الغرف', value: stats.rooms, icon: Home, color: '#FBBF24' },
     { label: 'رسائل الغرف', value: stats.roomMessages, icon: MessageSquare, color: '#FB923C' },
     { label: 'مكالمات نشطة', value: stats.activeCalls, icon: Phone, color: '#F87171' },
+    { label: 'رموز الأحلام', value: dreamsMeta?.total ?? '…', icon: Moon, color: '#A855F7' },
+    { label: 'أحاديث مخرَّجة', value: hadithMeta?.total ?? '…', icon: ScrollText, color: '#34D399' },
   ] : [];
 
   const TABS: { k: Tab; label: string; icon: any }[] = [
@@ -135,6 +171,8 @@ export default function AdminPage() {
     { k: 'users', label: 'المستخدمون', icon: Users },
     { k: 'posts', label: 'المنشورات', icon: FileText },
     { k: 'rooms', label: 'الغرف', icon: Home },
+    { k: 'sections', label: 'الأقسام المعرفية', icon: Layers },
+    { k: 'system', label: 'النظام', icon: Activity },
     { k: 'broadcast', label: 'إشعار جماعي', icon: Radio },
   ];
 
@@ -278,6 +316,70 @@ export default function AdminPage() {
           </div>
         )}
 
+        {/* ═══ الأقسام المعرفية ═══ */}
+        {tab === 'sections' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* الأحلام */}
+            <div style={{ padding: '16px', borderRadius: '16px', background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.25)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Moon size={22} color="#C084FC" />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '15px', fontWeight: 800 }}>موسوعة تفسير الأحلام</div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{dreamsMeta?.total ?? '…'} رمزاً · {dreamsMeta?.sources?.length ?? '…'} مصادر</div>
+                </div>
+                <button onClick={() => router.push('/dreams/admin')} style={linkBtn('#C084FC')}>
+                  إدارة الرموز <ExternalLink size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* الحديث */}
+            <div style={{ padding: '16px', borderRadius: '16px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                <ScrollText size={22} color="#34D399" />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '15px', fontWeight: 800 }}>أكاديمية علم الحديث</div>
+                  <div style={{ fontSize: '11px', color: '#9CA3AF' }}>{hadithMeta?.total ?? '…'} حديثاً · {hadithMeta?.termsCount ?? '…'} مصطلحاً</div>
+                </div>
+                <button onClick={() => router.push('/hadith')} style={linkBtn('#34D399')}>القسم <ExternalLink size={14} /></button>
+              </div>
+              {/* بحث وحذف الأحاديث */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '10px 12px' }}>
+                <Search size={16} color="#6B7280" />
+                <input value={hQuery} onChange={e => searchHadith(e.target.value)} placeholder="ابحث لإدارة/حذف حديث..." style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', fontSize: '13px', outline: 'none', direction: 'rtl' }} />
+                {hSearching && <Loader2 size={15} color="#34D399" style={{ animation: 'spin 1s linear infinite' }} />}
+              </div>
+              {hResults.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                  {hResults.map(h => (
+                    <div key={h.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px', borderRadius: '10px', background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                      <p style={{ flex: 1, fontSize: '12.5px', color: '#D1D5DB', lineHeight: 1.7, direction: 'rtl' }}>{h.text.slice(0, 140)}{h.text.length > 140 ? '…' : ''} <span style={{ color: '#6B7280' }}>— {h.attribution} ({h.grade})</span></p>
+                      <button onClick={() => deleteHadith(h.id)} style={{ width: '30px', height: '30px', borderRadius: '8px', background: 'rgba(239,68,68,0.1)', border: 'none', color: '#F87171', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Trash2 size={14} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ النظام (تشخيص) ═══ */}
+        {tab === 'system' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <SysRow label="قاعدة البيانات (MongoDB)" ok={health?.db === 'connected'} value={health?.db || '—'} />
+            <SysRow label="محرّك الذكاء (Gemini)" ok={!!health?.hasAIKey} value={health?.hasAIKey ? 'مفعّل' : 'غير مضبوط'} />
+            <SysRow label="إقلاع الخادم" ok={!!health?.startedAt} value={health?.startedAt ? new Date(health.startedAt).toLocaleString('ar') : '—'} />
+            <SysRow label="موسوعة الأحلام" ok={(dreamsMeta?.total || 0) > 0} value={`${dreamsMeta?.total ?? 0} رمز`} />
+            <SysRow label="أكاديمية الحديث" ok={(hadithMeta?.total || 0) > 0} value={`${hadithMeta?.total ?? 0} حديث`} />
+            <SysRow label="حسابك (مدير)" ok value={me?.email || ''} />
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+              <button onClick={() => router.push('/dreams/admin')} style={linkBtn('#C084FC')}><Moon size={14} /> إدارة الأحلام</button>
+              <button onClick={() => router.push('/hadith')} style={linkBtn('#34D399')}><ScrollText size={14} /> قسم الحديث</button>
+              <button onClick={() => router.push('/feed')} style={linkBtn('#EC4899')}><FileText size={14} /> الـ Feed</button>
+            </div>
+          </div>
+        )}
+
         {tab === 'broadcast' && (
           <div>
             <div style={{
@@ -314,6 +416,20 @@ export default function AdminPage() {
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+const linkBtn = (c: string): React.CSSProperties => ({
+  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10,
+  background: `${c}1a`, border: `1px solid ${c}44`, color: c, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+});
+function SysRow({ label, ok, value }: { label: string; ok?: boolean; value: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 12, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+      {ok ? <CheckCircle2 size={18} color="#34D399" /> : <XCircle size={18} color="#F87171" />}
+      <span style={{ flex: 1, fontSize: 13, fontWeight: 700 }}>{label}</span>
+      <span style={{ fontSize: 12, color: '#9CA3AF', maxWidth: '50%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
     </div>
   );
 }
