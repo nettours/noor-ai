@@ -11,6 +11,7 @@ import {
   HADITH_GRADES, HADITH_BOOKS, HADITH_TERMS, HADITH_CATEGORIES,
   type Hadith,
 } from './hadith-data';
+import { LEARNING_PATHS, QUIZZES, BOOK_GROUPS } from './hadith-learn-data';
 
 // الأحاديث المُولّدة تُحمَّل من JSON وقت التشغيل (لا عبر import) حتى لا يُبطئ
 // ملفُها الضخم (≈12MB) عمليةَ tsc في البناء. نجرّب عدّة مسارات محتملة.
@@ -36,6 +37,7 @@ interface Deps {
 const hadiths = new Map<string, Hadith>();
 const views = new Map<string, number>();
 const collections = new Map<string, Set<string>>();   // userId -> hadith ids
+const progress = new Map<string, { lessons: string[]; quizzes: Record<string, number> }>(); // userId -> تقدّم
 let deps: Deps;
 
 function normalizeAr(s: string): string {
@@ -57,6 +59,13 @@ async function persistCollection(userId: string) {
     await deps.getDb().collection('hadith_collections').updateOne({ userId }, { $set: { userId, ids } }, { upsert: true });
   } catch (e) { console.error('persistCollection:', e); }
 }
+async function persistProgress(userId: string) {
+  if (!deps.isDbReady()) return;
+  try {
+    const p = progress.get(userId) || { lessons: [], quizzes: {} };
+    await deps.getDb().collection('hadith_progress').updateOne({ userId }, { $set: { userId, ...p } }, { upsert: true });
+  } catch (e) { console.error('persistProgress:', e); }
+}
 
 export async function initHadith(db: any) {
   try {
@@ -71,6 +80,8 @@ export async function initHadith(db: any) {
     }
     const dbC = await db.collection('hadith_collections').find({}).toArray();
     for (const c of dbC) collections.set(c.userId, new Set(c.ids || []));
+    const dbP = await db.collection('hadith_progress').find({}).toArray();
+    for (const p of dbP) progress.set(p.userId, { lessons: p.lessons || [], quizzes: p.quizzes || {} });
   } catch (e) { console.error('initHadith:', e); for (const h of SEED_HADEETHS) hadiths.set(h.id, h); }
   console.log(`📜 Hadith KB: ${hadiths.size} حديثاً، ${HADITH_TERMS.length} مصطلحاً، ${HADITH_BOOKS.length} كتاباً`);
 }
@@ -185,6 +196,43 @@ export function registerHadithRoutes(app: Express, d: Deps) {
     collections.set(req.userId, set);
     persistCollection(req.userId);
     res.json({ success: true, saved: set.has(req.params.id) });
+  });
+
+  // ── التعلّم: المسارات وشجرة الكتب ──
+  app.get('/api/hadith/learn', (_req: Request, res: Response) => {
+    res.json({
+      success: true,
+      paths: LEARNING_PATHS.map(p => ({ id: p.id, title: p.title, level: p.level, icon: p.icon, color: p.color, desc: p.desc, lessonCount: p.lessons.length })),
+      bookGroups: BOOK_GROUPS.map(g => ({ ...g, books: g.bookIds.map(id => HADITH_BOOKS.find(b => b.id === id)).filter(Boolean) })),
+    });
+  });
+  app.get('/api/hadith/learn/:pathId', (req: Request, res: Response): any => {
+    const p = LEARNING_PATHS.find(x => x.id === req.params.pathId);
+    if (!p) return res.status(404).json({ success: false });
+    const lessons = p.lessons.map(l => ({
+      ...l,
+      termObjs: (l.terms || []).map(tid => HADITH_TERMS.find(t => t.id === tid)).filter(Boolean).map(t => ({ id: t!.id, term: t!.term })),
+    }));
+    res.json({ success: true, path: { ...p, lessons } });
+  });
+  app.get('/api/hadith/quiz', (req: Request, res: Response) => {
+    const level = String(req.query.level || '');
+    const list = level ? QUIZZES.filter(q => q.level === level) : QUIZZES;
+    res.json({ success: true, levels: Array.from(new Set(QUIZZES.map(q => q.level))), quizzes: list });
+  });
+
+  // ── تقدّم الطالب (محمي) ──
+  app.get('/api/hadith/progress', auth, (req: any, res: Response) => {
+    res.json({ success: true, progress: progress.get(req.userId) || { lessons: [], quizzes: {} } });
+  });
+  app.post('/api/hadith/progress', auth, (req: any, res: Response): any => {
+    const { lessonId, quizId, score } = req.body || {};
+    const p = progress.get(req.userId) || { lessons: [], quizzes: {} };
+    if (lessonId && !p.lessons.includes(lessonId)) p.lessons.push(lessonId);
+    if (quizId != null && typeof score === 'number') p.quizzes[String(quizId)] = Math.max(p.quizzes[String(quizId)] || 0, score);
+    progress.set(req.userId, p);
+    persistProgress(req.userId);
+    res.json({ success: true, progress: p });
   });
 
   // ── الأدمن ──

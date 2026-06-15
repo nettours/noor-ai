@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowRight, Search, ScrollText, BookOpen, Bookmark, Share2, X, Info,
-  Loader2, Sparkles, Library, GraduationCap, ChevronLeft, Hash,
+  Loader2, Sparkles, Library, GraduationCap, ChevronLeft, Hash, CheckCircle2, XCircle,
 } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000/api';
@@ -27,7 +27,7 @@ const gradeLabel = (g: Grade[] | undefined, key: string) => g?.find(x => x.key =
 
 export default function HadithPage() {
   const router = useRouter();
-  const [view, setView] = useState<'browse' | 'terms' | 'books'>('browse');
+  const [view, setView] = useState<'browse' | 'learn' | 'terms' | 'books'>('browse');
   const [meta, setMeta] = useState<{ total: number; grades: Grade[]; books: Book[]; categories: Category[]; termsCount: number; disclaimer: string } | null>(null);
   const [hadiths, setHadiths] = useState<LightHadith[]>([]);
   const [total, setTotal] = useState(0);
@@ -196,7 +196,7 @@ export default function HadithPage() {
         </header>
 
         <div style={{ display: 'flex', gap: 8, padding: 5, background: 'rgba(255,255,255,0.04)', borderRadius: 16, marginBottom: 16 }}>
-          {[{ k: 'browse', label: 'الأحاديث', icon: ScrollText }, { k: 'terms', label: 'مصطلح الحديث', icon: GraduationCap }, { k: 'books', label: 'الكتب', icon: Library }].map(t => {
+          {[{ k: 'browse', label: 'الأحاديث', icon: ScrollText }, { k: 'learn', label: 'تعلّم', icon: GraduationCap }, { k: 'terms', label: 'المصطلح', icon: Hash }, { k: 'books', label: 'الكتب', icon: Library }].map(t => {
             const Icon = t.icon; const active = view === t.k;
             return <button key={t.k} onClick={() => setView(t.k as any)} style={{ flex: 1, padding: 11, borderRadius: 12, border: 'none', cursor: 'pointer', background: active ? 'linear-gradient(135deg,#059669,#047857)' : 'transparent', color: '#fff', fontSize: 13.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Icon size={16} /> {t.label}</button>;
           })}
@@ -275,6 +275,8 @@ export default function HadithPage() {
           </>
         )}
 
+        {view === 'learn' && <Learn loggedIn={loggedIn.current} goLogin={() => router.push('/auth/login')} />}
+
         {view === 'books' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {(meta?.books || []).map(b => (
@@ -328,3 +330,171 @@ function Card({ children }: { children: React.ReactNode }) { return <div style={
 function Label({ icon, c, children }: { icon: React.ReactNode; c: string; children: React.ReactNode }) {
   return <div style={{ fontSize: 12.5, fontWeight: 800, color: c, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 26, height: 26, borderRadius: 8, background: `${c}1f`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>{children}</div>;
 }
+
+// ═══ مكوّن التعلّم: مسارات + دروس + اختبار + شجرة الكتب ═══
+interface PathLite { id: string; title: string; level: string; icon: string; color: string; desc: string; lessonCount: number; }
+interface LessonFull { id: string; title: string; content: string; termObjs?: { id: string; term: string }[]; }
+interface QuizQ { id: string; level: string; q: string; options: string[]; correct: number; source: string; }
+interface BookGroupFull { id: string; name: string; desc: string; books: { id: string; name: string; author: string }[]; }
+
+function Learn({ loggedIn, goLogin }: { loggedIn: boolean; goLogin: () => void }) {
+  const [paths, setPaths] = useState<PathLite[]>([]);
+  const [groups, setGroups] = useState<BookGroupFull[]>([]);
+  const [sel, setSel] = useState<{ id: string; title: string; level: string; color: string; lessons: LessonFull[] } | null>(null);
+  const [openL, setOpenL] = useState<string | null>(null);
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const [quiz, setQuiz] = useState<QuizQ[] | null>(null);
+  const [qi, setQi] = useState(0);
+  const [pick, setPick] = useState<number | null>(null);
+  const [score, setScore] = useState(0);
+
+  useEffect(() => {
+    fetch(`${API}/hadith/learn`).then(r => r.json()).then(d => { if (d.success) { setPaths(d.paths); setGroups(d.bookGroups); } }).catch(() => {});
+    if (loggedIn) fetch(`${API}/hadith/progress`, { headers: authHeaders() }).then(r => r.json()).then(d => { if (d.success) setDone(new Set(d.progress.lessons || [])); }).catch(() => {});
+  }, [loggedIn]);
+
+  const openPath = async (id: string) => {
+    const d = await fetch(`${API}/hadith/learn/${id}`).then(r => r.json()).catch(() => null);
+    if (d?.success) { setSel(d.path); setOpenL(d.path.lessons[0]?.id || null); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  };
+  const markDone = async (lessonId: string) => {
+    setDone(p => new Set(p).add(lessonId));
+    if (loggedIn) fetch(`${API}/hadith/progress`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ lessonId }) }).catch(() => {});
+  };
+  const startQuiz = async (level: string) => {
+    const d = await fetch(`${API}/hadith/quiz?level=${encodeURIComponent(level)}`).then(r => r.json()).catch(() => null);
+    const qs = (d?.quizzes || []).length ? d.quizzes : (await fetch(`${API}/hadith/quiz`).then(r => r.json())).quizzes;
+    setQuiz(qs); setQi(0); setPick(null); setScore(0);
+  };
+  const answer = (idx: number) => {
+    if (pick !== null || !quiz) return;
+    setPick(idx);
+    if (idx === quiz[qi].correct) setScore(s => s + 1);
+  };
+  const next = () => {
+    if (!quiz) return;
+    if (qi + 1 >= quiz.length) {
+      const pct = Math.round((score / quiz.length) * 100);
+      if (loggedIn) fetch(`${API}/hadith/progress`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, body: JSON.stringify({ quizId: sel?.level || 'all', score: pct }) }).catch(() => {});
+      setQi(quiz.length); // شاشة النتيجة
+    } else { setQi(i => i + 1); setPick(null); }
+  };
+
+  // ── شاشة الاختبار ──
+  if (quiz) {
+    if (qi >= quiz.length) {
+      const pct = Math.round((score / quiz.length) * 100);
+      return (
+        <div style={{ textAlign: 'center', padding: '30px 16px' }}>
+          <div style={{ fontSize: 60, marginBottom: 12 }}>{pct === 100 ? '🏆' : pct >= 60 ? '🌟' : '📚'}</div>
+          <h2 style={{ fontSize: 26, fontWeight: 900 }}>{score} / {quiz.length}</h2>
+          <p style={{ fontSize: 14, color: '#86c5a6', margin: '8px 0 22px' }}>{pct === 100 ? 'إتقانٌ تامّ، ما شاء الله!' : pct >= 60 ? 'أحسنت، واصل التعلّم' : 'راجع الدروس وأعد المحاولة'}</p>
+          <button onClick={() => setQuiz(null)} style={primaryBtn}>العودة للمسار</button>
+        </div>
+      );
+    }
+    const q = quiz[qi];
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#86c5a6', marginBottom: 14 }}>
+          <span>سؤال {qi + 1} / {quiz.length}</span><span>النقاط: {score}</span>
+        </div>
+        <div style={{ padding: 20, borderRadius: 18, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', marginBottom: 14 }}>
+          <h3 style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.8, marginBottom: 16, direction: 'rtl', textAlign: 'center' }}>{q.q}</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {q.options.map((o, idx) => {
+              const isC = idx === q.correct, isP = pick === idx;
+              let bg = 'rgba(255,255,255,0.04)', bd = 'rgba(255,255,255,0.1)';
+              if (pick !== null) { if (isC) { bg = 'rgba(16,185,129,0.15)'; bd = '#10B981'; } else if (isP) { bg = 'rgba(239,68,68,0.15)'; bd = '#EF4444'; } }
+              return <button key={idx} onClick={() => answer(idx)} disabled={pick !== null} style={{ padding: 15, borderRadius: 13, background: bg, border: `1px solid ${bd}`, color: '#fff', fontSize: 15, fontWeight: 600, cursor: pick === null ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'space-between', direction: 'rtl' }}>
+                <span>{o}</span>{pick !== null && isC && <CheckCircle2 size={18} color="#10B981" />}{pick !== null && isP && !isC && <XCircle size={18} color="#EF4444" />}</button>;
+            })}
+          </div>
+          {pick !== null && (
+            <div style={{ marginTop: 14, padding: 13, borderRadius: 12, background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.25)' }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: '#34D399', marginBottom: 4 }}>📚 المصدر</div>
+              <p style={{ fontSize: 13, color: '#dfeee6', lineHeight: 1.8, direction: 'rtl' }}>{q.source}</p>
+            </div>
+          )}
+        </div>
+        {pick !== null && <button onClick={next} style={primaryBtn}>{qi + 1 >= quiz.length ? 'إنهاء' : 'التالي'}</button>}
+      </div>
+    );
+  }
+
+  // ── تفاصيل المسار (الدروس) ──
+  if (sel) {
+    return (
+      <div>
+        <button onClick={() => setSel(null)} style={{ ...primaryBtn, width: 'auto', padding: '8px 14px', marginBottom: 14, background: 'rgba(255,255,255,0.06)', color: '#fff' }}><ChevronLeft size={15} /> المسارات</button>
+        <h2 style={{ fontFamily: 'Amiri, serif', fontSize: 24, fontWeight: 700, color: sel.color, marginBottom: 4 }}>{sel.title}</h2>
+        <p style={{ fontSize: 12, color: '#86c5a6', marginBottom: 16 }}>{sel.level} · {sel.lessons.length} دروس</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {sel.lessons.map(l => {
+            const isOpen = openL === l.id, isDone = done.has(l.id);
+            return (
+              <div key={l.id} style={{ borderRadius: 16, overflow: 'hidden', background: 'rgba(255,255,255,0.035)', border: `1px solid ${isDone ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.08)'}` }}>
+                <button onClick={() => setOpenL(isOpen ? null : l.id)} style={{ width: '100%', padding: 15, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, color: '#fff', textAlign: 'right' }}>
+                  {isDone ? <CheckCircle2 size={18} color="#34D399" /> : <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #4b5563' }} />}
+                  <span style={{ flex: 1, fontSize: 15, fontWeight: 700 }}>{l.title}</span>
+                  <ChevronLeft size={16} color="#6b7280" style={{ transform: isOpen ? 'rotate(-90deg)' : 'none', transition: 'transform .3s' }} />
+                </button>
+                {isOpen && (
+                  <div style={{ padding: '0 15px 15px' }}>
+                    <p style={{ fontFamily: 'Amiri, serif', fontSize: 16, lineHeight: 2.1, color: '#e6efe9', direction: 'rtl', textAlign: 'justify', marginBottom: 12 }}>{l.content}</p>
+                    {l.termObjs && l.termObjs.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+                        {l.termObjs.map(t => <span key={t.id} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, background: 'rgba(139,92,246,0.15)', color: '#c4b5fd' }}>#{t.term}</span>)}
+                      </div>
+                    )}
+                    {!isDone && <button onClick={() => markDone(l.id)} style={{ ...primaryBtn, padding: '10px', fontSize: 13 }}>✓ أتممت هذا الدرس</button>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={() => startQuiz(sel.level)} style={{ ...primaryBtn, marginTop: 16, background: 'linear-gradient(135deg,#7C3AED,#6D28D9)' }}><GraduationCap size={17} /> ابدأ اختبار هذا المستوى</button>
+      </div>
+    );
+  }
+
+  // ── قائمة المسارات + شجرة الكتب ──
+  return (
+    <div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+        {paths.map(p => {
+          return (
+            <button key={p.id} onClick={() => openPath(p.id)} style={{ textAlign: 'right', padding: 16, borderRadius: 18, background: `linear-gradient(135deg, ${p.color}1f, ${p.color}08)`, border: `1px solid ${p.color}44`, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 48, height: 48, borderRadius: 14, background: `${p.color}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, flexShrink: 0 }}>{p.icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h3 style={{ fontFamily: 'Amiri, serif', fontSize: 18, fontWeight: 700 }}>{p.title}</h3>
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 999, background: `${p.color}22`, color: p.color }}>{p.level}</span>
+                </div>
+                <p style={{ fontSize: 12, color: '#9CA3AF', lineHeight: 1.6, marginTop: 3 }}>{p.desc}</p>
+                <div style={{ fontSize: 11, color: p.color, marginTop: 4 }}>{p.lessonCount} دروس</div>
+              </div>
+              <ChevronLeft size={18} color="#6b7280" />
+            </button>
+          );
+        })}
+      </div>
+
+      {/* شجرة الكتب */}
+      <h3 style={{ fontSize: 15, fontWeight: 800, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, color: '#34D399' }}><Library size={17} /> شجرة الكتب الحديثية</h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {groups.map(g => (
+          <div key={g.id} style={{ padding: 14, borderRadius: 16, background: 'rgba(255,255,255,0.035)', border: '1px solid rgba(16,185,129,0.2)' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#34D399', marginBottom: 4 }}>{g.name}</div>
+            <p style={{ fontSize: 12.5, color: '#cbd5e1', lineHeight: 1.8, direction: 'rtl', marginBottom: 8 }}>{g.desc}</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {g.books.map(b => <span key={b.id} style={{ fontSize: 12, padding: '5px 11px', borderRadius: 999, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#eafaf2' }}>{b.name}</span>)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+const primaryBtn: React.CSSProperties = { width: '100%', padding: 14, borderRadius: 14, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg,#059669,#047857)', color: '#fff', fontSize: 14.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 };
