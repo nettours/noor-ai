@@ -228,6 +228,23 @@ export default function CreatePostPage() {
             )}
             <input ref={fileInputRef} type="file" accept={kind === 'image' ? 'image/*' : 'video/*'} style={{ display: 'none' }}
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }} />
+
+            {/* بديل: لصق رابط مباشر (يعمل بلا Cloudinary) */}
+            {!mediaUrl && (
+              <div style={{ marginTop: '10px' }}>
+                <div style={{ textAlign: 'center', fontSize: '11px', color: '#6B7280', margin: '8px 0' }}>أو الصق رابطاً مباشراً للوسائط</div>
+                <input
+                  type="url" inputMode="url" dir="ltr"
+                  placeholder={kind === 'video' ? 'https://.../video.mp4' : 'https://.../image.jpg'}
+                  onChange={e => setMediaUrl(e.target.value.trim())}
+                  style={{
+                    width: '100%', padding: '12px 14px', borderRadius: '12px',
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#fff', fontSize: '13px', outline: 'none',
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
 

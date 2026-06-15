@@ -16,6 +16,8 @@ interface Reflection {
   text: string;
   likeCount: number;
   isQuran?: boolean;
+  kind?: string;
+  mediaUrl?: string;
 }
 
 // Curated fallback so visitors ALWAYS see beautiful content, even when the
@@ -42,7 +44,7 @@ export function Reflections() {
         const posts = d?.posts;
         if (d?.success && Array.isArray(posts) && posts.length) {
           const mapped: Reflection[] = posts
-            .filter((p: any) => p?.text && (p.kind === 'text' || !p.kind))
+            .filter((p: any) => p?.text || p?.mediaUrl)   // نصّ أو وسائط (صورة/فيديو)
             .slice(0, 6)
             .map((p: any) => ({
               id: p.id,
@@ -50,9 +52,11 @@ export function Reflections() {
               authorAvatar: p.authorAvatar || (p.authorName || 'ن').charAt(0),
               authorColor: p.authorColor || '#10B981',
               category: p.category || 'خاطرة',
-              text: p.text,
+              text: p.text || '',
               likeCount: p.likeCount || 0,
               isQuran: p.category === 'آية',
+              kind: p.kind,
+              mediaUrl: p.mediaUrl,
             }));
           if (mapped.length) setItems(mapped);
         }
@@ -112,17 +116,28 @@ export function Reflections() {
               }}>{r.category}</span>
             </div>
 
-            <p
-              className={r.isQuran ? 'font-quran' : undefined}
-              style={{
-                flex: 1, margin: 0, color: r.isQuran ? 'var(--gold-7)' : 'var(--text-2)',
-                fontSize: r.isQuran ? 19 : 15, lineHeight: r.isQuran ? 2 : 1.85,
-                textAlign: r.isQuran ? 'center' : 'right',
-                display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-              }}
-            >
-              {r.text}
-            </p>
+            {r.mediaUrl && (
+              <Link href={`/post/${r.id}`} style={{ display: 'block', borderRadius: 14, overflow: 'hidden', background: '#000' }}>
+                {r.kind === 'video'
+                  ? <video src={r.mediaUrl} muted loop playsInline controls preload="metadata" style={{ width: '100%', maxHeight: 240, objectFit: 'cover', display: 'block' }} />
+                  // eslint-disable-next-line @next/next/no-img-element
+                  : <img src={r.mediaUrl} alt="" style={{ width: '100%', maxHeight: 240, objectFit: 'cover', display: 'block' }} />}
+              </Link>
+            )}
+
+            {r.text && (
+              <p
+                className={r.isQuran ? 'font-quran' : undefined}
+                style={{
+                  flex: 1, margin: 0, color: r.isQuran ? 'var(--gold-7)' : 'var(--text-2)',
+                  fontSize: r.isQuran ? 19 : 15, lineHeight: r.isQuran ? 2 : 1.85,
+                  textAlign: r.isQuran ? 'center' : 'right',
+                  display: '-webkit-box', WebkitLineClamp: r.mediaUrl ? 2 : 5, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                }}
+              >
+                {r.text}
+              </p>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-4)', fontSize: 13 }}>
               <Heart size={15} color="#F87171" fill="#F87171" />

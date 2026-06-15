@@ -65,6 +65,9 @@ export function PostView({ post }: { post: SharedPost | null }) {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={post.mediaUrl} alt="" style={{ width: '100%', borderRadius: 16, display: 'block' }} />
         )}
+        {post.mediaUrl && post.kind === 'video' && (
+          <video src={post.mediaUrl} controls playsInline autoPlay muted loop style={{ width: '100%', borderRadius: 16, display: 'block', background: '#000', maxHeight: '70vh' }} />
+        )}
 
         <p
           className={isQuran ? 'font-quran' : undefined}

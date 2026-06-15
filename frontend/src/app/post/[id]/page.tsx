@@ -21,13 +21,24 @@ export async function generateMetadata({
   const { id } = await params;
   const post = await getPost(id);
   if (!post) return { title: 'تأمّل · نور AI' };
-  const desc = post.text.slice(0, 180);
+  const desc = (post.text || 'تأمّل على نور AI 🌙').slice(0, 180);
   const title = `${post.authorName} — تأمّل على نور AI`;
+  const isVideo = post.kind === 'video';
+  // صورة المعاينة: الصورة نفسها، أو لقطة من الفيديو (Cloudinary: استبدال الامتداد بـ jpg)
+  const ogImage = post.kind === 'image' && post.mediaUrl
+    ? post.mediaUrl
+    : isVideo && post.mediaUrl
+      ? post.mediaUrl.replace(/\.(mp4|mov|webm|m4v|ogg)$/i, '.jpg')
+      : undefined;
   return {
     title,
     description: desc,
-    openGraph: { title, description: desc, type: 'article' },
-    twitter: { card: 'summary_large_image', title, description: desc },
+    openGraph: {
+      title, description: desc, type: isVideo ? 'video.other' : 'article',
+      ...(ogImage ? { images: [{ url: ogImage }] } : {}),
+      ...(isVideo && post.mediaUrl ? { videos: [{ url: post.mediaUrl }] } : {}),
+    },
+    twitter: { card: 'summary_large_image', title, description: desc, ...(ogImage ? { images: [ogImage] } : {}) },
   };
 }
 
