@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Scale, Check, Minus, X, Sparkles, Flame, RotateCcw } from 'lucide-react';
+import { ArrowRight, Scale, Check, Minus, X, Sparkles, Flame, RotateCcw, Lightbulb, BookOpen, ChevronLeft, ArrowLeft } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════
 // مرآة القلب — محاسبة النفس
@@ -27,6 +27,116 @@ const DIMENSIONS: Dim[] = [
     question: 'هل راقبتَ نيّتك وأخلصتَ، وتذكّرتَ الآخرة؟',
     source: '«إنما الأعمالُ بالنيّات» [متفق عليه]' },
 ];
+
+interface Remedy {
+  intro: string;
+  steps: string[];
+  reminders: { text: string; source: string }[];
+  books: { title: string; author: string; note: string }[];
+  link?: { label: string; href: string };
+}
+const REMEDIES: Record<string, Remedy> = {
+  salah: {
+    intro: 'الصلاةُ صلةٌ بين العبد وربّه، وأوّلُ ما يُحاسَب عليه العبدُ يوم القيامة. وإصلاحُها إصلاحٌ لسائر العمل.',
+    steps: [
+      'اضبط منبّهًا قبل كل صلاةٍ بدقائق، واجعل الطهارة جاهزة.',
+      'ابدأ بهدفٍ صغير: فرضٌ واحدٌ في أوّل وقته كلَّ يوم، ثم زِد.',
+      'أحضِر قلبك: تذكّر أنك بين يدي الله، وتدبّر ما تقرأ.',
+      'حافظ على السنن الرواتب؛ فهي جابرةٌ لنقص الفرائض.',
+      'صلِّ ركعتين قبل النوم بخشوع، وحاسِب نفسك على صلوات يومك.',
+    ],
+    reminders: [
+      { text: 'أوّلُ ما يُحاسَب به العبدُ يوم القيامة الصلاةُ، فإن صلَحت صلَح سائرُ عمله.', source: 'حديث [الطبراني، حسن]' },
+      { text: '﴿ وَأَقِمِ الصَّلَاةَ لِذِكْرِي ﴾', source: '[طه ١٤]' },
+    ],
+    books: [
+      { title: 'أسرار الصلاة', author: 'ابن القيّم', note: 'في معاني الصلاة وحِكَمها وإحضار القلب فيها.' },
+      { title: 'الخشوع في الصلاة', author: 'ابن رجب الحنبلي', note: 'رسالةٌ لطيفة في تحصيل الخشوع وعلاج الوسوسة.' },
+      { title: 'صفة صلاة النبي ﷺ', author: 'الألباني', note: 'لتصحيح صفة الصلاة على السنّة.' },
+    ],
+    link: { label: 'أوقات الصلاة', href: '/prayer' },
+  },
+  tongue: {
+    intro: 'حفظُ اللسان رأسُ الأمر؛ فأكثرُ خطايا ابن آدم من لسانه، وأكثرُ ما يُدخل الجنّةَ تقوى الله وحُسنُ الخُلق.',
+    steps: [
+      'قبل أن تتكلّم اسأل: أهو خيرٌ يُكتب لي؟ فإن شككتَ فاصمت.',
+      'اهجُر الغيبةَ والنميمةَ والجدالَ والسخرية.',
+      'إذا غضبتَ فاسكت، وإن أخطأتَ فبادِر بالاعتذار.',
+      'اشغل لسانك بالذكر والكلمة الطيّبة بدل فضول الكلام.',
+      'أحسِن الظنّ، واطوِ عثرات الناس كما تحبّ أن تُطوى عثراتُك.',
+    ],
+    reminders: [
+      { text: 'من كان يؤمن بالله واليوم الآخر فليقل خيرًا أو ليصمت.', source: 'حديث [متفق عليه]' },
+      { text: 'وهل يَكُبّ الناسَ في النار على وجوههم إلا حصائدُ ألسنتهم؟', source: 'حديث [الترمذي، حسن صحيح]' },
+    ],
+    books: [
+      { title: 'الصمت وآداب اللسان', author: 'ابن أبي الدنيا', note: 'جامعٌ للآثار في خطر اللسان وآدابه.' },
+      { title: 'الأذكار', author: 'النووي', note: 'فيه أبوابٌ نفيسة في آداب الكلام وحفظ اللسان.' },
+      { title: 'آفات اللسان', author: 'أبو حامد الغزالي', note: 'بابٌ ماتعٌ ضمن «إحياء علوم الدين».' },
+    ],
+    link: { label: 'الأذكار', href: '/adhkar' },
+  },
+  naf3: {
+    intro: 'خيرُ الناس أنفعُهم للناس؛ والإحسانُ إلى الخلق بابٌ عظيمٌ لمحبّة الله، وبه تُبنى المجتمعات.',
+    steps: [
+      'ابدأ بصدقةٍ يوميّةٍ ولو يسيرة؛ فالصدقةُ تُطفئ الخطيئة.',
+      'أعِن محتاجًا، أو اقضِ حاجةَ أخٍ لك، أو فرّج كربةً.',
+      'ابتسم في وجه من تلقاه، وأمِط الأذى عن الطريق.',
+      'صِل رحمك، واتّصل بمن انقطع عنك، وأطعِم الطعام.',
+      'انوِ بعملك نفعَ الناس لله؛ فالنيّةُ تُحوّل العادةَ عبادة.',
+    ],
+    reminders: [
+      { text: 'خيرُ الناس أنفعُهم للناس.', source: 'حديث [الطبراني، حسن]' },
+      { text: '﴿ وَأَحْسِنُوا ۛ إِنَّ اللَّهَ يُحِبُّ الْمُحْسِنِينَ ﴾', source: '[البقرة ١٩٥]' },
+    ],
+    books: [
+      { title: 'صناعة المعروف', author: 'ابن أبي الدنيا', note: 'في فضل قضاء الحوائج والإحسان للناس.' },
+      { title: 'رياض الصالحين', author: 'النووي', note: 'أبواب البرّ والصلة والإحسان — عمليّةٌ ميسّرة.' },
+      { title: 'مكارم الأخلاق', author: 'ابن أبي الدنيا', note: 'في محاسن الأخلاق وأثرها الاجتماعي.' },
+    ],
+    link: { label: 'شارك خيرًا في المجتمع', href: '/feed' },
+  },
+  ilm: {
+    intro: 'طلبُ العلم النافع طريقٌ إلى الجنّة، وتدبّرُ القرآن غايةُ إنزاله. والعلمُ بلا عملٍ كالشجر بلا ثمر.',
+    steps: [
+      'خصّص وِردًا يوميًّا من القرآن بتدبّرٍ ولو صفحة.',
+      'احفظ كلَّ يومٍ حديثًا أو فائدةً وطبّقها.',
+      'اقرأ صفحاتٍ من كتابٍ نافعٍ بنيّة العمل.',
+      'احضر مجلسَ علمٍ أو درسًا (ولو مسموعًا)، وراجِع ما تعلّمت.',
+      'علّم ما تعلّمت؛ فالعلمُ يزكو بالبذل، والدالُّ على الخير كفاعله.',
+    ],
+    reminders: [
+      { text: 'من سلك طريقًا يلتمس فيه علمًا سهّل اللهُ له به طريقًا إلى الجنّة.', source: 'حديث [مسلم]' },
+      { text: '﴿ أَفَلَا يَتَدَبَّرُونَ الْقُرْآنَ أَمْ عَلَىٰ قُلُوبٍ أَقْفَالُهَا ﴾', source: '[محمد ٢٤]' },
+    ],
+    books: [
+      { title: 'مفتاح دار السعادة', author: 'ابن القيّم', note: 'في فضل العلم والحثّ عليه وثمراته.' },
+      { title: 'صيد الخاطر', author: 'ابن الجوزي', note: 'خواطرُ إيمانيّةٌ تُحرّك الهمّة وتُذكّر.' },
+      { title: 'تيسير الكريم الرحمن (تفسير السعدي)', author: 'عبد الرحمن السعدي', note: 'تفسيرٌ ميسّرٌ يعين على التدبّر.' },
+    ],
+    link: { label: 'أكاديمية علم الحديث', href: '/hadith' },
+  },
+  qalb: {
+    intro: 'صلاحُ القلب صلاحُ الجسد كلّه؛ وأصلُ المحاسبة مراقبةُ القلب والنيّة، فبهما تُقبَل الأعمالُ أو تُردّ.',
+    steps: [
+      'جدّد النيّةَ لله قبل كل عمل، واطلب الإخلاص.',
+      'راقب خواطرك؛ فمن راقب اللهَ في سرّه حفظه في علنه.',
+      'أكثِر من الاستغفار والذكر؛ فبه تطمئنّ القلوب.',
+      'تذكّر الموتَ والآخرةَ كلَّ يوم؛ فهو مُليّنٌ للقلب القاسي.',
+      'حاسِب قلبك: ما الذي يشغله عن الله؟ وطهّره منه.',
+    ],
+    reminders: [
+      { text: 'ألا وإنّ في الجسد مضغةً إذا صلَحت صلَح الجسدُ كلّه، وإذا فسَدت فسَد الجسدُ كلّه، ألا وهي القلب.', source: 'حديث [متفق عليه]' },
+      { text: '﴿ الَّذِينَ آمَنُوا وَتَطْمَئِنُّ قُلُوبُهُم بِذِكْرِ اللَّهِ ﴾', source: '[الرعد ٢٨]' },
+    ],
+    books: [
+      { title: 'الرعاية لحقوق الله', author: 'الحارث المحاسبي', note: 'أصلٌ في علم المحاسبة ومراقبة القلب.' },
+      { title: 'إغاثة اللهفان من مصايد الشيطان', author: 'ابن القيّم', note: 'في أمراض القلوب وعلاجها.' },
+      { title: 'مدارج السالكين', author: 'ابن القيّم', note: 'في منازل القلب ومقامات الإيمان (للمتقدّم).' },
+    ],
+    link: { label: 'الأذكار', href: '/adhkar' },
+  },
+};
 
 const COUNSELS: { text: string; source: string }[] = [
   { text: 'حاسِبوا أنفسَكم قبل أن تُحاسَبوا، وزِنوا أعمالَكم قبل أن تُوزَن.', source: 'عمر بن الخطاب رضي الله عنه' },
@@ -72,6 +182,7 @@ export default function MuhasabaPage() {
   const [note, setNote] = useState('');
   const [store, setStore] = useState<Store>({});
   const [saved, setSaved] = useState(false);
+  const [openRemedy, setOpenRemedy] = useState<string | null>(null);
 
   useEffect(() => {
     const s = loadStore();
@@ -89,7 +200,10 @@ export default function MuhasabaPage() {
   const pct = Math.round((Object.values(scores).reduce((a, b) => a + b, 0) / (DIMENSIONS.length * 2)) * 100) || 0;
   const streak = computeStreak(store);
 
-  const set = (id: string, v: number) => { setScores(p => ({ ...p, [id]: v })); setSaved(false); };
+  const set = (id: string, v: number) => {
+    setScores(p => ({ ...p, [id]: v })); setSaved(false);
+    if (v < 2) setOpenRemedy(id); // عند «لا» أو «جزئيًّا» يُفتح لوحُ الارتقاء لهذا المحور
+  };
 
   const save = () => {
     const s = { ...store, [todayKey()]: { scores, note: note.trim(), at: new Date().toISOString() } };
@@ -172,6 +286,50 @@ export default function MuhasabaPage() {
                   );
                 })}
               </div>
+
+              {/* لوح الارتقاء (يُفتح عند «لا/جزئيًّا») */}
+              {(() => {
+                const rem = REMEDIES[d.id]; if (!rem) return null;
+                const open = openRemedy === d.id;
+                return (
+                  <div style={{ marginTop: 12 }}>
+                    <button onClick={() => setOpenRemedy(open ? null : d.id)} style={{ width: '100%', padding: '10px', borderRadius: 11, cursor: 'pointer', fontSize: 13, fontWeight: 700, border: `1px solid ${d.color}44`, background: `${d.color}14`, color: d.color, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <Lightbulb size={15} /> {open ? 'إخفاء' : 'كيف ترتقي في هذا المحور؟'}
+                      <ChevronLeft size={15} style={{ transform: open ? 'rotate(-90deg)' : 'none', transition: 'transform .3s' }} />
+                    </button>
+                    {open && (
+                      <div style={{ marginTop: 10, padding: 14, borderRadius: 14, background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        <p style={{ fontSize: 13.5, color: '#dfe3ea', lineHeight: 1.9, direction: 'rtl', marginBottom: 12 }}>{rem.intro}</p>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: d.color, marginBottom: 6 }}>✦ خطواتٌ عمليّة</div>
+                        <ul style={{ margin: '0 0 12px', paddingInlineStart: 18, direction: 'rtl' }}>
+                          {rem.steps.map((s, i) => <li key={i} style={{ fontSize: 13, color: '#dfe3ea', lineHeight: 1.85, marginBottom: 5 }}>{s}</li>)}
+                        </ul>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: '#FBBF24', marginBottom: 6 }}>✦ تذكيرٌ مؤصَّل</div>
+                        {rem.reminders.map((r, i) => (
+                          <div key={i} style={{ marginBottom: 9 }}>
+                            <p style={{ fontFamily: 'Amiri, serif', fontSize: 15.5, color: '#f0eee6', lineHeight: 1.95, direction: 'rtl' }}>{r.text}</p>
+                            <p style={{ fontSize: 11, color: '#9CA3AF', direction: 'rtl' }}>— {r.source}</p>
+                          </div>
+                        ))}
+                        <div style={{ fontSize: 12, fontWeight: 800, color: '#A78BFA', margin: '12px 0 6px', display: 'flex', alignItems: 'center', gap: 5 }}><BookOpen size={13} /> كتبٌ نافعة للاستزادة</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                          {rem.books.map((b, i) => (
+                            <div key={i} style={{ padding: '9px 11px', borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: '#e5e7eb', direction: 'rtl' }}>📘 {b.title} <span style={{ color: '#9CA3AF', fontWeight: 400 }}>— {b.author}</span></div>
+                              <div style={{ fontSize: 11.5, color: '#9ca3af', lineHeight: 1.6, direction: 'rtl', marginTop: 2 }}>{b.note}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {rem.link && (
+                          <button onClick={() => router.push(rem.link!.href)} style={{ width: '100%', marginTop: 12, padding: '11px', borderRadius: 11, cursor: 'pointer', border: 'none', background: `linear-gradient(135deg, ${d.color}, ${d.color}cc)`, color: '#0a0a16', fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                            انتقل إلى: {rem.link.label} <ArrowLeft size={15} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ))}
         </div>
