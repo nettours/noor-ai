@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Scale, Check, Minus, X, Sparkles, Flame, RotateCcw, Lightbulb, BookOpen, ChevronLeft, ArrowLeft, Volume2, Library } from 'lucide-react';
+import { ArrowRight, Scale, Check, Minus, X, Sparkles, Flame, RotateCcw, Lightbulb, BookOpen, ChevronLeft, ArrowLeft, Volume2, Library, CalendarDays } from 'lucide-react';
+import { PLAN30 } from './plan30';
 
 let _ayahAudio: HTMLAudioElement | null = null;
 function playAyah(file: string) {
@@ -192,12 +193,23 @@ export default function MuhasabaPage() {
   const [store, setStore] = useState<Store>({});
   const [saved, setSaved] = useState(false);
   const [openRemedy, setOpenRemedy] = useState<string | null>(null);
+  const [openPlan, setOpenPlan] = useState<string | null>(null);
+  const [planDone, setPlanDone] = useState<Record<string, boolean>>({});
+
+  const togglePlan = (axis: string, day: number) => {
+    setPlanDone(p => {
+      const n = { ...p, [`${axis}:${day}`]: !p[`${axis}:${day}`] };
+      try { localStorage.setItem('noor_plan30', JSON.stringify(n)); } catch {}
+      return n;
+    });
+  };
 
   useEffect(() => {
     const s = loadStore();
     setStore(s);
     const t = s[todayKey()];
     if (t) { setScores(t.scores || {}); setNote(t.note || ''); setSaved(true); }
+    try { setPlanDone(JSON.parse(localStorage.getItem('noor_plan30') || '{}')); } catch {}
   }, []);
 
   const counsel = useMemo(() => {
@@ -344,6 +356,33 @@ export default function MuhasabaPage() {
                         <button onClick={() => router.push('/maktaba')} style={{ width: '100%', marginTop: 8, padding: '10px', borderRadius: 11, cursor: 'pointer', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(251,191,36,0.1)', color: '#FBBF24', fontSize: 12.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                           <Library size={14} /> المكتبة الكاملة (كل الكتب النافعة)
                         </button>
+
+                        {/* خطّة 30 يومًا */}
+                        {(() => {
+                          const planOpen = openPlan === d.id;
+                          const tasks = PLAN30[d.id] || [];
+                          const doneCount = tasks.filter((_, di) => planDone[`${d.id}:${di}`]).length;
+                          return (
+                            <>
+                              <button onClick={() => setOpenPlan(planOpen ? null : d.id)} style={{ width: '100%', marginTop: 8, padding: '10px', borderRadius: 11, cursor: 'pointer', border: `1px solid ${d.color}44`, background: `${d.color}10`, color: d.color, fontSize: 12.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                <CalendarDays size={14} /> خطّة الـ30 يومًا — {doneCount}/30
+                              </button>
+                              {planOpen && (
+                                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto', paddingInlineEnd: 4 }}>
+                                  {tasks.map((task, di) => {
+                                    const dn = !!planDone[`${d.id}:${di}`];
+                                    return (
+                                      <button key={di} onClick={() => togglePlan(d.id, di)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px', borderRadius: 10, textAlign: 'right', cursor: 'pointer', background: dn ? `${d.color}1a` : 'rgba(255,255,255,0.03)', border: `1px solid ${dn ? d.color + '55' : 'rgba(255,255,255,0.07)'}`, color: '#fff' }}>
+                                        <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, background: dn ? d.color : 'rgba(255,255,255,0.06)', color: dn ? '#0a0a16' : '#9CA3AF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800 }}>{dn ? '✓' : di + 1}</span>
+                                        <span style={{ flex: 1, fontSize: 12.5, lineHeight: 1.6, direction: 'rtl', textDecoration: dn ? 'line-through' : 'none', opacity: dn ? 0.65 : 1 }}>{task}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
