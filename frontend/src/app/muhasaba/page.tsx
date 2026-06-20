@@ -1,7 +1,16 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Scale, Check, Minus, X, Sparkles, Flame, RotateCcw, Lightbulb, BookOpen, ChevronLeft, ArrowLeft } from 'lucide-react';
+import { ArrowRight, Scale, Check, Minus, X, Sparkles, Flame, RotateCcw, Lightbulb, BookOpen, ChevronLeft, ArrowLeft, Volume2, Library } from 'lucide-react';
+
+let _ayahAudio: HTMLAudioElement | null = null;
+function playAyah(file: string) {
+  try {
+    if (_ayahAudio) { _ayahAudio.pause(); }
+    _ayahAudio = new Audio(`https://everyayah.com/data/Alafasy_128kbps/${file}.mp3`);
+    _ayahAudio.play().catch(() => {});
+  } catch {}
+}
 
 // ═══════════════════════════════════════════════════════════════
 // مرآة القلب — محاسبة النفس
@@ -31,7 +40,7 @@ const DIMENSIONS: Dim[] = [
 interface Remedy {
   intro: string;
   steps: string[];
-  reminders: { text: string; source: string }[];
+  reminders: { text: string; source: string; audio?: string }[];
   books: { title: string; author: string; note: string }[];
   link?: { label: string; href: string };
 }
@@ -47,7 +56,7 @@ const REMEDIES: Record<string, Remedy> = {
     ],
     reminders: [
       { text: 'أوّلُ ما يُحاسَب به العبدُ يوم القيامة الصلاةُ، فإن صلَحت صلَح سائرُ عمله.', source: 'حديث [الطبراني، حسن]' },
-      { text: '﴿ وَأَقِمِ الصَّلَاةَ لِذِكْرِي ﴾', source: '[طه ١٤]' },
+      { text: '﴿ وَأَقِمِ الصَّلَاةَ لِذِكْرِي ﴾', source: '[طه ١٤]', audio: '020014' },
     ],
     books: [
       { title: 'أسرار الصلاة', author: 'ابن القيّم', note: 'في معاني الصلاة وحِكَمها وإحضار القلب فيها.' },
@@ -87,7 +96,7 @@ const REMEDIES: Record<string, Remedy> = {
     ],
     reminders: [
       { text: 'خيرُ الناس أنفعُهم للناس.', source: 'حديث [الطبراني، حسن]' },
-      { text: '﴿ وَأَحْسِنُوا ۛ إِنَّ اللَّهَ يُحِبُّ الْمُحْسِنِينَ ﴾', source: '[البقرة ١٩٥]' },
+      { text: '﴿ وَأَحْسِنُوا ۛ إِنَّ اللَّهَ يُحِبُّ الْمُحْسِنِينَ ﴾', source: '[البقرة ١٩٥]', audio: '002195' },
     ],
     books: [
       { title: 'صناعة المعروف', author: 'ابن أبي الدنيا', note: 'في فضل قضاء الحوائج والإحسان للناس.' },
@@ -107,7 +116,7 @@ const REMEDIES: Record<string, Remedy> = {
     ],
     reminders: [
       { text: 'من سلك طريقًا يلتمس فيه علمًا سهّل اللهُ له به طريقًا إلى الجنّة.', source: 'حديث [مسلم]' },
-      { text: '﴿ أَفَلَا يَتَدَبَّرُونَ الْقُرْآنَ أَمْ عَلَىٰ قُلُوبٍ أَقْفَالُهَا ﴾', source: '[محمد ٢٤]' },
+      { text: '﴿ أَفَلَا يَتَدَبَّرُونَ الْقُرْآنَ أَمْ عَلَىٰ قُلُوبٍ أَقْفَالُهَا ﴾', source: '[محمد ٢٤]', audio: '047024' },
     ],
     books: [
       { title: 'مفتاح دار السعادة', author: 'ابن القيّم', note: 'في فضل العلم والحثّ عليه وثمراته.' },
@@ -127,7 +136,7 @@ const REMEDIES: Record<string, Remedy> = {
     ],
     reminders: [
       { text: 'ألا وإنّ في الجسد مضغةً إذا صلَحت صلَح الجسدُ كلّه، وإذا فسَدت فسَد الجسدُ كلّه، ألا وهي القلب.', source: 'حديث [متفق عليه]' },
-      { text: '﴿ الَّذِينَ آمَنُوا وَتَطْمَئِنُّ قُلُوبُهُم بِذِكْرِ اللَّهِ ﴾', source: '[الرعد ٢٨]' },
+      { text: '﴿ الَّذِينَ آمَنُوا وَتَطْمَئِنُّ قُلُوبُهُم بِذِكْرِ اللَّهِ ﴾', source: '[الرعد ٢٨]', audio: '013028' },
     ],
     books: [
       { title: 'الرعاية لحقوق الله', author: 'الحارث المحاسبي', note: 'أصلٌ في علم المحاسبة ومراقبة القلب.' },
@@ -308,7 +317,14 @@ export default function MuhasabaPage() {
                         {rem.reminders.map((r, i) => (
                           <div key={i} style={{ marginBottom: 9 }}>
                             <p style={{ fontFamily: 'Amiri, serif', fontSize: 15.5, color: '#f0eee6', lineHeight: 1.95, direction: 'rtl' }}>{r.text}</p>
-                            <p style={{ fontSize: 11, color: '#9CA3AF', direction: 'rtl' }}>— {r.source}</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, direction: 'rtl' }}>
+                              <p style={{ fontSize: 11, color: '#9CA3AF' }}>— {r.source}</p>
+                              {r.audio && (
+                                <button onClick={() => playAyah(r.audio!)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 999, background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)', color: '#34D399', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                                  <Volume2 size={12} /> استمع للتلاوة
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
                         <div style={{ fontSize: 12, fontWeight: 800, color: '#A78BFA', margin: '12px 0 6px', display: 'flex', alignItems: 'center', gap: 5 }}><BookOpen size={13} /> كتبٌ نافعة للاستزادة</div>
@@ -325,6 +341,9 @@ export default function MuhasabaPage() {
                             انتقل إلى: {rem.link.label} <ArrowLeft size={15} />
                           </button>
                         )}
+                        <button onClick={() => router.push('/maktaba')} style={{ width: '100%', marginTop: 8, padding: '10px', borderRadius: 11, cursor: 'pointer', border: '1px solid rgba(251,191,36,0.35)', background: 'rgba(251,191,36,0.1)', color: '#FBBF24', fontSize: 12.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                          <Library size={14} /> المكتبة الكاملة (كل الكتب النافعة)
+                        </button>
                       </div>
                     )}
                   </div>

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   BookOpen, Bot, Clock, Compass, Heart, Users, Sparkles,
-  MessageCircle, Star, ChevronLeft, LogOut, Volume2, Pause, GraduationCap, Moon, ScrollText, Scale
+  MessageCircle, Star, ChevronLeft, LogOut, Volume2, Pause, GraduationCap, Moon, ScrollText, Scale, Library
 } from 'lucide-react';
 import { useI18n } from '@/components/ui/I18nProvider';
 import { NextPrayerCard, StreakCard, DailyChallenges, HijriDate } from '@/components/common';
@@ -126,6 +126,7 @@ export default function HomePage() {
     { href: '/dreams', icon: Moon, title: 'تفسير الأحلام', color: '#A855F7' },
     { href: '/hadith', icon: ScrollText, title: 'علم الحديث', color: '#10B981' },
     { href: '/muhasaba', icon: Scale, title: 'محاسبة النفس', color: '#818CF8' },
+    { href: '/maktaba', icon: Library, title: 'مكتبة نور', color: '#FBBF24' },
   ];
 
   const dailyText = tab === 'verse' ? daily?.verse?.text : tab === 'hadith' ? daily?.hadith?.text : daily?.wisdom?.text;
