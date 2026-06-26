@@ -1,7 +1,7 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Search, Sparkles, Heart, Check, RotateCcw, X, BookOpen } from 'lucide-react';
+import { ArrowRight, Search, Sparkles, Heart, Check, RotateCcw, X, BookOpen, Volume2, Play, Square } from 'lucide-react';
 import { NAMES, type Name } from './asma-data';
 
 // ═══════════════════════════════════════════════════════════════
@@ -18,11 +18,50 @@ export default function AsmaPage() {
   const [fav, setFav] = useState<Set<number>>(new Set());
   const [tasbih, setTasbih] = useState(0);
   const [goal, setGoal] = useState(33);
+  // ── التلاوة الصوتية (نُطق المتصفّح) ──
+  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+  const recitingRef = useRef(false);
+  const [reciting, setReciting] = useState(false);
+  const [recIdx, setRecIdx] = useState<number | null>(null);
 
   useEffect(() => {
     try { setCounted(new Set(JSON.parse(localStorage.getItem('noor_asma_counted') || '[]'))); } catch {}
     try { setFav(new Set(JSON.parse(localStorage.getItem('noor_asma_fav') || '[]'))); } catch {}
+    const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
+    if (synth) {
+      const load = () => { voicesRef.current = synth.getVoices(); };
+      load(); synth.addEventListener?.('voiceschanged', load);
+      return () => { synth.removeEventListener?.('voiceschanged', load); synth.cancel(); };
+    }
   }, []);
+
+  const arVoice = () => voicesRef.current.find(v => /^ar/i.test(v.lang)) || null;
+  const speak = (text: string, rate = 0.85) => {
+    const synth = window.speechSynthesis; if (!synth) { alert('متصفّحك لا يدعم النطق الصوتي'); return; }
+    recitingRef.current = false; setReciting(false); setRecIdx(null);
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = arVoice(); if (v) u.voice = v;
+    u.lang = 'ar-SA'; u.rate = rate;
+    setTimeout(() => synth.speak(u), 60);
+  };
+  const reciteAll = () => {
+    const synth = window.speechSynthesis; if (!synth) { alert('متصفّحك لا يدعم النطق الصوتي'); return; }
+    if (recitingRef.current) { recitingRef.current = false; setReciting(false); setRecIdx(null); synth.cancel(); return; }
+    synth.cancel(); recitingRef.current = true; setReciting(true);
+    let i = 0;
+    const next = () => {
+      if (!recitingRef.current || i >= NAMES.length) { recitingRef.current = false; setReciting(false); setRecIdx(null); return; }
+      setRecIdx(i);
+      const u = new SpeechSynthesisUtterance('يا ' + NAMES[i].n);
+      const v = arVoice(); if (v) u.voice = v;
+      u.lang = 'ar-SA'; u.rate = 0.9;
+      u.onend = () => { i++; next(); };
+      u.onerror = () => { i++; next(); };
+      synth.speak(u);
+    };
+    next();
+  };
 
   const persist = (key: string, s: Set<number>) => { try { localStorage.setItem(key, JSON.stringify(Array.from(s))); } catch {} };
   const toggleCounted = (i: number) => setCounted(p => { const n = new Set(p); n.has(i) ? n.delete(i) : n.add(i); persist('noor_asma_counted', n); return n; });
@@ -54,6 +93,9 @@ export default function AsmaPage() {
 
           <div style={{ textAlign: 'center', marginBottom: 18 }}>
             <h1 style={{ fontFamily: 'Amiri, serif', fontSize: 52, fontWeight: 700, color: '#FBBF24', lineHeight: 1.3, textShadow: '0 6px 30px rgba(251,191,36,0.4)' }}>{nm.n}</h1>
+            <button onClick={() => speak('يا ' + nm.n + '. ' + nm.m)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '8px 18px', borderRadius: 999, cursor: 'pointer', background: 'rgba(251,191,36,0.14)', border: '1px solid rgba(251,191,36,0.35)', color: '#FBBF24', fontSize: 13, fontWeight: 700 }}>
+              <Volume2 size={15} /> استمع للاسم ومعناه
+            </button>
           </div>
 
           {/* المعنى */}
@@ -136,6 +178,11 @@ export default function AsmaPage() {
           <div style={{ fontSize: 13, color: '#cbb896', marginTop: 6, lineHeight: 1.7, direction: 'rtl' }}>{NAMES[today].m}</div>
         </button>
 
+        {/* تلاوة متتابعة لكل الأسماء */}
+        <button onClick={reciteAll} style={{ width: '100%', padding: 13, borderRadius: 14, marginBottom: 16, cursor: 'pointer', border: `1px solid ${reciting ? '#F87171' : 'rgba(251,191,36,0.3)'}`, background: reciting ? 'rgba(248,113,113,0.12)' : 'rgba(251,191,36,0.08)', color: reciting ? '#F87171' : '#FBBF24', fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          {reciting ? <><Square size={16} /> إيقاف التلاوة {recIdx != null ? `(${recIdx + 1}/${NAMES.length})` : ''}</> : <><Play size={16} /> تلاوة الأسماء الحسنى متتابعةً</>}
+        </button>
+
         {/* بحث */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: '13px 16px', marginBottom: 16 }}>
           <Search size={18} color="#6B7280" />
@@ -145,7 +192,7 @@ export default function AsmaPage() {
         {/* الشبكة */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))', gap: 10 }}>
           {list.map(({ n, i }) => (
-            <button key={i} onClick={() => open(i)} style={{ position: 'relative', padding: '18px 8px', borderRadius: 14, cursor: 'pointer', background: counted.has(i) ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.035)', border: `1px solid ${counted.has(i) ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.08)'}`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <button key={i} onClick={() => open(i)} style={{ position: 'relative', padding: '18px 8px', borderRadius: 14, cursor: 'pointer', background: recIdx === i ? 'rgba(251,191,36,0.22)' : counted.has(i) ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.035)', border: `1px solid ${recIdx === i ? '#FBBF24' : counted.has(i) ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.08)'}`, color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transform: recIdx === i ? 'scale(1.06)' : 'none', transition: 'transform .2s' }}>
               <span style={{ position: 'absolute', top: 6, right: 8, fontSize: 9, color: '#6b5536' }}>{i + 1}</span>
               {counted.has(i) && <Check size={12} color="#34D399" style={{ position: 'absolute', top: 6, left: 8 }} />}
               <span style={{ fontFamily: 'Amiri, serif', fontSize: 19, fontWeight: 700, color: '#FBBF24' }}>{n.n}</span>
