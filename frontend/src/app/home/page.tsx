@@ -127,6 +127,7 @@ export default function HomePage() {
     { href: '/hadith', icon: ScrollText, title: 'علم الحديث', color: '#10B981' },
     { href: '/muhasaba', icon: Scale, title: 'محاسبة النفس', color: '#818CF8' },
     { href: '/maktaba', icon: Library, title: 'مكتبة نور', color: '#FBBF24' },
+    { href: '/asma', icon: Sparkles, title: 'أسماء الله الحسنى', color: '#F59E0B' },
   ];
 
   const dailyText = tab === 'verse' ? daily?.verse?.text : tab === 'hadith' ? daily?.hadith?.text : daily?.wisdom?.text;
